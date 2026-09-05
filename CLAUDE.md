@@ -41,9 +41,15 @@ scheme is reused across labs and is sometimes wrong.
 
 ## Conventions
 
-- Every write that a human can undo should happen inside a "changeset" (see
-  `src/lib/changeset.ts` once it exists) so bulk-undo has something coherent
-  to revert.
+- Every write that a human can undo should happen inside a "changeset" — use
+  `withChangeset()` from `src/lib/changeset.ts`, which opens a transaction and
+  tags every row it writes with one changeset id, so bulk-undo has something
+  coherent to revert. Write through the transaction handle it gives you, never
+  the module-level `prisma`.
+- Read placement history through `src/lib/queries/placement.ts`. It has one
+  time predicate (`activeAt`) and "now" is just `activeAt(new Date())` — do not
+  add an `endedAt: null` shortcut, because a second definition of "current" is
+  exactly what drifts.
 - Soft delete (`deletedAt`/`deletedBy`/`deleteReason`) on `Animal` and `Cage` —
   never a hard delete of either.
 - Mobile-first: build the small-viewport layout first, let desktop follow.
@@ -52,4 +58,23 @@ scheme is reused across labs and is sometimes wrong.
 
 ## Running locally
 
-_TODO once `.env.example` and the seed script exist._
+No Postgres install and no cloud account needed — Prisma ships a local one.
+
+```bash
+cp .env.example .env     # the default DATABASE_URL matches the command below
+npm install              # postinstall runs `prisma generate`
+npm run db:up            # local Postgres; prints a URL — paste it into .env
+npm run db:deploy        # apply migrations
+npm run db:seed          # ~415 animals, 128 cages, breeding pairs, litters
+npm run dev
+```
+
+`npm run db:down` stops the database. `npm run db:reset` drops, re-migrates and
+re-seeds it.
+
+`npm test` runs Vitest against a **separate** `colony_test` database on the same
+server, created and migrated automatically, so testing never wipes the seeded
+colony you are looking at.
+
+The seed is deterministic (fixed PRNG seed), so the demo, screenshots and tests
+all describe the same colony. Re-running produces identical data.

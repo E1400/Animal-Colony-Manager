@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -44,7 +45,16 @@ next-env.d.ts
 /prisma/dev.db
 /prisma/dev.db-journal
 
+# Vendored agent skill packs auto-installed by `prisma init`. Regenerate with
+# `npx prisma skills sync`; they are upstream docs, not this project's AI setup.
+/.agents/
+/.windsurf/
+/.claude/skills/
+/skills-lock.json
+
 # playwright
 /playwright-report/
 /test-results/
 /blob-report/
+
+/src/generated/prisma

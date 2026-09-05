@@ -1,0 +1,887 @@
+// Animal Colony Manager — data model.
+//
+// Two rules drive almost every decision in this file:
+//
+//   1. Location is not identity. Where a cage sits, and which cage an animal
+//      lives in, are time-bounded *facts*, not columns. They live in
+//      CagePlacement / AnimalCagePlacement as [startedAt, endedAt) intervals.
+//      There is deliberately no `currentCageId` on Animal and no
+//      `rackPositionId` on Cage. Current state is a query, never a cache.
+//
+//   2. Event time and record time are different. Every fact carries both
+//      `occurredAt`/`startedAt` (when it happened in the vivarium) and
+//      `recordedAt` (when a human typed it in). Facts arrive late and out of
+//      order; a schema that conflates the two cannot represent "I noticed on
+//      Tuesday that this animal died last Thursday."
+//
+// Overlap prevention (an animal in two cages at once, two cages in one rack
+// slot) is enforced by Postgres exclusion constraints, not by application
+// code. Those live in the migration SQL because Prisma's schema language
+// cannot express them — see prisma/migrations/*/migration.sql.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identity & authorization
+//
+// Auth.js (GitHub OIDC) owns User/Account/Session and proves *who you are*.
+// What you may do is Membership.role, which lives in our DB and is resolved
+// server-side. A GitHub login never carries a role with it.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified") @db.Timestamptz(3)
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships Membership[]
+
+  changesets      Changeset[]
+  recordedEvents  HusbandryEvent[]     @relation("EventRecordedBy")
+  importBatches   ImportBatch[]
+  coverageOwned   CoverageAssignment[] @relation("CoverageOwner")
+  coverageCovered CoverageAssignment[] @relation("CoverageCovering")
+
+  cagePlacementsStarted   CagePlacement[]       @relation("CagePlacementStartedBy")
+  cagePlacementsEnded     CagePlacement[]       @relation("CagePlacementEndedBy")
+  animalPlacementsStarted AnimalCagePlacement[] @relation("AnimalPlacementStartedBy")
+  animalPlacementsEnded   AnimalCagePlacement[] @relation("AnimalPlacementEndedBy")
+
+  animalsDeleted Animal[] @relation("AnimalDeletedBy")
+  cagesDeleted   Cage[]   @relation("CageDeletedBy")
+
+  @@map("users")
+}
+
+/// Auth.js adapter table. Field names are fixed by the adapter contract.
+model Account {
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// Auth.js adapter table.
+model Session {
+  sessionToken String   @id @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Auth.js adapter table.
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime @db.Timestamptz(3)
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+/// A lab is the authorization scope. Animals, cages and roles all hang off one.
+model Lab {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  piName    String?  @map("pi_name")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships   Membership[]
+  cages         Cage[]
+  animals       Animal[]
+  strains       Strain[]
+  events        HusbandryEvent[]
+  breedingPairs BreedingPair[]
+  coverage      CoverageAssignment[]
+  importBatches ImportBatch[]
+  changesets    Changeset[]
+  racks         Rack[]
+
+  @@map("labs")
+}
+
+/// Role enum ordered loosely by breadth of authority. Authorization is checked
+/// per lab: a PI in one lab is a stranger in the next.
+enum Role {
+  PI
+  LAB_MANAGER
+  VETERINARIAN
+  RESEARCHER
+  TECHNICIAN
+  UNDERGRAD
+  AUDITOR
+
+  @@map("role")
+}
+
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  labId     String   @map("lab_id") @db.Uuid
+  role      Role
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lab  Lab  @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, labId])
+  @@index([labId, role])
+  @@map("memberships")
+}
+
+/// Vacation / on-call handoff: `covering` may act with `owner`'s scope for a
+/// bounded window. Time-bounded like everything else here.
+enum CoverageScope {
+  LAB
+  ROOM
+  RACK
+
+  @@map("coverage_scope")
+}
+
+model CoverageAssignment {
+  id             String        @id @default(uuid()) @db.Uuid
+  labId          String        @map("lab_id") @db.Uuid
+  ownerUserId    String        @map("owner_user_id") @db.Uuid
+  coveringUserId String        @map("covering_user_id") @db.Uuid
+  scope          CoverageScope @default(LAB)
+  roomId         String?       @map("room_id") @db.Uuid
+  rackId         String?       @map("rack_id") @db.Uuid
+  startsAt       DateTime      @map("starts_at") @db.Timestamptz(3)
+  endsAt         DateTime?     @map("ends_at") @db.Timestamptz(3)
+  reason         String?
+  recordedAt     DateTime      @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  changesetId    String?       @map("changeset_id") @db.Uuid
+
+  lab       Lab        @relation(fields: [labId], references: [id], onDelete: Cascade)
+  owner     User       @relation("CoverageOwner", fields: [ownerUserId], references: [id])
+  covering  User       @relation("CoverageCovering", fields: [coveringUserId], references: [id])
+  room      Room?      @relation(fields: [roomId], references: [id])
+  rack      Rack?      @relation(fields: [rackId], references: [id])
+  changeset Changeset? @relation(fields: [changesetId], references: [id])
+
+  @@index([labId, startsAt])
+  @@index([coveringUserId, startsAt])
+  @@map("coverage_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Facility: Room -> Rack -> RackPosition
+//
+// A RackPosition is a *slot* — an address that exists whether or not a cage is
+// currently in it. Cages come and go; B-04-12 stays B-04-12.
+// ---------------------------------------------------------------------------
+
+model Room {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  building  String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  racks    Rack[]
+  coverage CoverageAssignment[]
+
+  @@map("rooms")
+}
+
+model Rack {
+  id        String   @id @default(uuid()) @db.Uuid
+  roomId    String   @map("room_id") @db.Uuid
+  labId     String?  @map("lab_id") @db.Uuid
+  code      String
+  label     String?
+  rowCount  Int      @map("row_count")
+  colCount  Int      @map("col_count")
+  sides     String[] @default(["A", "B"])
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  room      Room                 @relation(fields: [roomId], references: [id])
+  lab       Lab?                 @relation(fields: [labId], references: [id])
+  positions RackPosition[]
+  coverage  CoverageAssignment[]
+
+  @@unique([roomId, code])
+  @@map("racks")
+}
+
+model RackPosition {
+  id      String  @id @default(uuid()) @db.Uuid
+  rackId  String  @map("rack_id") @db.Uuid
+  side    String
+  row     Int
+  col     Int
+  /// Human-readable address, e.g. "B-04-12". Denormalized from the components
+  /// above because it is what people read off a rack and type into search; it
+  /// is derived from immutable slot geometry, not from occupancy.
+  label   String
+  retired Boolean @default(false)
+
+  rack       Rack            @relation(fields: [rackId], references: [id], onDelete: Cascade)
+  placements CagePlacement[]
+
+  @@unique([rackId, side, row, col])
+  @@unique([rackId, label])
+  @@index([label])
+  @@map("rack_positions")
+}
+
+// ---------------------------------------------------------------------------
+// Cages
+// ---------------------------------------------------------------------------
+
+enum CageStatus {
+  ACTIVE
+  EMPTY
+  RETIRED
+
+  @@map("cage_status")
+}
+
+model Cage {
+  id        String     @id @default(uuid()) @db.Uuid
+  labId     String     @map("lab_id") @db.Uuid
+  /// Stable printed identifier, encoded into the cage-card QR code. Distinct
+  /// from the rack address: the card stays with the cage when it moves.
+  code      String     @unique
+  cageType  String?    @map("cage_type")
+  status    CageStatus @default(ACTIVE)
+  notes     String?
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  retiredAt DateTime?  @map("retired_at") @db.Timestamptz(3)
+
+  // Soft delete. A retired cage and a cage entered by mistake are different
+  // things, and neither may vanish from history.
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedById  String?   @map("deleted_by_id") @db.Uuid
+  deleteReason String?   @map("delete_reason")
+
+  lab              Lab                   @relation(fields: [labId], references: [id])
+  deletedBy        User?                 @relation("CageDeletedBy", fields: [deletedById], references: [id])
+  placements       CagePlacement[]
+  animalPlacements AnimalCagePlacement[]
+  events           HusbandryEvent[]
+  breedingPairs    BreedingPair[]
+  importRows       ImportRow[]
+
+  @@index([labId, status])
+  @@index([deletedAt])
+  @@map("cages")
+}
+
+/// Where a cage sat, and when. Append-only: a move closes the open row by
+/// setting `endedAt` and inserts a new one. `endedAt IS NULL` means "still
+/// there". Never collapse this into a column on Cage.
+model CagePlacement {
+  id             String @id @default(uuid()) @db.Uuid
+  cageId         String @map("cage_id") @db.Uuid
+  rackPositionId String @map("rack_position_id") @db.Uuid
+
+  /// Real-world interval.
+  startedAt DateTime  @map("started_at") @db.Timestamptz(3)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  /// System time — when each end of the interval was entered.
+  recordedAt    DateTime  @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  endRecordedAt DateTime? @map("end_recorded_at") @db.Timestamptz(3)
+
+  startedById String? @map("started_by_id") @db.Uuid
+  endedById   String? @map("ended_by_id") @db.Uuid
+  reason      String?
+
+  changesetId    String? @map("changeset_id") @db.Uuid
+  endChangesetId String? @map("end_changeset_id") @db.Uuid
+
+  cage         Cage         @relation(fields: [cageId], references: [id])
+  rackPosition RackPosition @relation(fields: [rackPositionId], references: [id])
+  startedBy    User?        @relation("CagePlacementStartedBy", fields: [startedById], references: [id])
+  endedBy      User?        @relation("CagePlacementEndedBy", fields: [endedById], references: [id])
+  changeset    Changeset?   @relation("CagePlacementChangeset", fields: [changesetId], references: [id])
+  endChangeset Changeset?   @relation("CagePlacementEndChangeset", fields: [endChangesetId], references: [id])
+
+  // Supports both "where is this cage now" (endedAt IS NULL) and "where was it
+  // on June 3rd" (startedAt <= t AND (endedAt IS NULL OR endedAt > t)).
+  @@index([cageId, startedAt])
+  @@index([rackPositionId, startedAt])
+  @@index([endedAt])
+  @@map("cage_placements")
+}
+
+// ---------------------------------------------------------------------------
+// Animals
+// ---------------------------------------------------------------------------
+
+enum Sex {
+  MALE
+  FEMALE
+  UNKNOWN
+
+  @@map("sex")
+}
+
+enum AnimalSource {
+  BORN_IN_HOUSE
+  VENDOR
+  TRANSFER_IN
+  UNKNOWN
+
+  @@map("animal_source")
+}
+
+/// Precision of `birthDate`. Imported spreadsheets routinely carry "Jun 2024"
+/// or nothing at all; recording that as midnight on the 1st and forgetting is
+/// how ages silently become wrong.
+enum DatePrecision {
+  DAY
+  MONTH
+  YEAR
+  UNKNOWN
+
+  @@map("date_precision")
+}
+
+model Strain {
+  id             String  @id @default(uuid()) @db.Uuid
+  labId          String? @map("lab_id") @db.Uuid
+  name           String
+  commonName     String? @map("common_name")
+  background     String?
+  jaxStockNumber String? @map("jax_stock_number")
+
+  lab     Lab?     @relation(fields: [labId], references: [id])
+  animals Animal[]
+
+  @@unique([labId, name])
+  @@map("strains")
+}
+
+model Animal {
+  /// System identity. Deliberately opaque and never shown as *the* ID to
+  /// users: lab-local ear tags live in AnimalIdentifier because they are
+  /// reused, reassigned, and sometimes simply wrong.
+  id    String @id @default(uuid()) @db.Uuid
+  labId String @map("lab_id") @db.Uuid
+
+  species  String  @default("Mus musculus")
+  sex      Sex     @default(UNKNOWN)
+  strainId String? @map("strain_id") @db.Uuid
+
+  birthDate          DateTime?     @map("birth_date") @db.Date
+  birthDatePrecision DatePrecision @default(DAY) @map("birth_date_precision")
+
+  source     AnimalSource @default(UNKNOWN)
+  acquiredAt DateTime?    @map("acquired_at") @db.Timestamptz(3)
+
+  damId    String? @map("dam_id") @db.Uuid
+  sireId   String? @map("sire_id") @db.Uuid
+  litterId String? @map("litter_id") @db.Uuid
+
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Soft delete — see Cage.
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedById  String?   @map("deleted_by_id") @db.Uuid
+  deleteReason String?   @map("delete_reason")
+
+  lab       Lab     @relation(fields: [labId], references: [id])
+  strain    Strain? @relation(fields: [strainId], references: [id])
+  dam       Animal? @relation("Dam", fields: [damId], references: [id])
+  sire      Animal? @relation("Sire", fields: [sireId], references: [id])
+  litter    Litter? @relation(fields: [litterId], references: [id])
+  deletedBy User?   @relation("AnimalDeletedBy", fields: [deletedById], references: [id])
+
+  offspringByDam  Animal[]              @relation("Dam")
+  offspringBySire Animal[]              @relation("Sire")
+  identifiers     AnimalIdentifier[]
+  placements      AnimalCagePlacement[]
+  events          HusbandryEvent[]
+  genotypes       Genotype[]
+  breedingRoles   BreedingPairMember[]
+  importRows      ImportRow[]
+
+  @@index([labId, sex])
+  @@index([strainId])
+  @@index([birthDate])
+  @@index([deletedAt])
+  @@index([litterId])
+  @@map("animals")
+}
+
+enum IdentifierScheme {
+  EAR_TAG
+  EAR_PUNCH
+  TOE_CLIP
+  TAIL_MARK
+  TATTOO
+  RFID
+  VENDOR_ID
+  LEGACY_SPREADSHEET
+
+  @@map("identifier_scheme")
+}
+
+/// A lab-local label for an animal. Never a primary key: ear tags get reused
+/// after an animal dies, two labs use the same numbering, and transcription
+/// errors are routine. `namespace` scopes the value (usually the lab slug, or
+/// the vendor/source for external IDs); uniqueness is enforced only over
+/// *active* identifiers, so a retired tag can legitimately be reissued.
+model AnimalIdentifier {
+  id         String           @id @default(uuid()) @db.Uuid
+  animalId   String           @map("animal_id") @db.Uuid
+  namespace  String
+  scheme     IdentifierScheme
+  value      String
+  isPrimary  Boolean          @default(false) @map("is_primary")
+  assignedAt DateTime         @map("assigned_at") @db.Timestamptz(3)
+  retiredAt  DateTime?        @map("retired_at") @db.Timestamptz(3)
+  recordedAt DateTime         @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  notes      String?
+
+  changesetId String? @map("changeset_id") @db.Uuid
+
+  animal    Animal     @relation(fields: [animalId], references: [id])
+  changeset Changeset? @relation(fields: [changesetId], references: [id])
+
+  @@index([animalId])
+  @@index([scheme, value])
+  @@index([namespace, value])
+  @@map("animal_identifiers")
+}
+
+enum PlacementReason {
+  INITIAL
+  CAGE_CHANGE
+  WEANING
+  BREEDING_SETUP
+  BREEDING_END
+  SEPARATION
+  OVERCROWDING
+  HEALTH_ISOLATION
+  TRANSFER
+  IMPORT
+  CORRECTION
+
+  @@map("placement_reason")
+}
+
+/// Which cage an animal lived in, and when. Same interval shape as
+/// CagePlacement — "who is in this cage now" and "who was in it on June 3rd"
+/// are one query with a different timestamp.
+model AnimalCagePlacement {
+  id       String @id @default(uuid()) @db.Uuid
+  animalId String @map("animal_id") @db.Uuid
+  cageId   String @map("cage_id") @db.Uuid
+
+  startedAt DateTime  @map("started_at") @db.Timestamptz(3)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  recordedAt    DateTime  @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  endRecordedAt DateTime? @map("end_recorded_at") @db.Timestamptz(3)
+
+  startedById String?         @map("started_by_id") @db.Uuid
+  endedById   String?         @map("ended_by_id") @db.Uuid
+  reason      PlacementReason @default(CAGE_CHANGE)
+  notes       String?
+
+  changesetId    String? @map("changeset_id") @db.Uuid
+  endChangesetId String? @map("end_changeset_id") @db.Uuid
+
+  animal       Animal     @relation(fields: [animalId], references: [id])
+  cage         Cage       @relation(fields: [cageId], references: [id])
+  startedBy    User?      @relation("AnimalPlacementStartedBy", fields: [startedById], references: [id])
+  endedBy      User?      @relation("AnimalPlacementEndedBy", fields: [endedById], references: [id])
+  changeset    Changeset? @relation("AnimalPlacementChangeset", fields: [changesetId], references: [id])
+  endChangeset Changeset? @relation("AnimalPlacementEndChangeset", fields: [endChangesetId], references: [id])
+
+  @@index([animalId, startedAt])
+  @@index([cageId, startedAt])
+  @@index([endedAt])
+  @@map("animal_cage_placements")
+}
+
+// ---------------------------------------------------------------------------
+// Genotype
+//
+// Separate from Animal because it arrives weeks after the animal does, can be
+// re-run, and can disagree with itself between runs.
+// ---------------------------------------------------------------------------
+
+enum GenotypeResult {
+  WT
+  HET
+  HOM
+  HEMI
+  NEGATIVE
+  POSITIVE
+  PENDING
+  FAILED
+  UNKNOWN
+
+  @@map("genotype_result")
+}
+
+model Genotype {
+  id       String @id @default(uuid()) @db.Uuid
+  animalId String @map("animal_id") @db.Uuid
+  locus    String
+
+  /// What the cross predicted, versus what the assay actually said.
+  expected GenotypeResult @default(UNKNOWN)
+  result   GenotypeResult @default(PENDING)
+
+  /// Event time (when tissue was assayed) vs record time (when the result was
+  /// entered). Genotyping is the canonical late-arriving fact.
+  assayedAt  DateTime? @map("assayed_at") @db.Timestamptz(3)
+  recordedAt DateTime  @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  confirmed    Boolean   @default(false)
+  confirmedAt  DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  source       String?
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(3)
+  notes        String?
+
+  changesetId String? @map("changeset_id") @db.Uuid
+
+  animal    Animal     @relation(fields: [animalId], references: [id])
+  changeset Changeset? @relation(fields: [changesetId], references: [id])
+
+  @@index([animalId, locus])
+  @@index([result])
+  @@map("genotypes")
+}
+
+// ---------------------------------------------------------------------------
+// Breeding
+// ---------------------------------------------------------------------------
+
+enum BreedingStatus {
+  ACTIVE
+  RESTING
+  RETIRED
+
+  @@map("breeding_status")
+}
+
+enum BreedingRole {
+  SIRE
+  DAM
+
+  @@map("breeding_role")
+}
+
+/// Modeled as a pair *setup* with members rather than two FK columns, so trios
+/// and harems — which are normal — do not need a second table later.
+model BreedingPair {
+  id     String  @id @default(uuid()) @db.Uuid
+  labId  String  @map("lab_id") @db.Uuid
+  name   String?
+  /// The cage the pair was set up in. Where that cage physically sits over time
+  /// is still CagePlacement's job.
+  cageId String? @map("cage_id") @db.Uuid
+
+  setUpAt    DateTime       @map("set_up_at") @db.Timestamptz(3)
+  endedAt    DateTime?      @map("ended_at") @db.Timestamptz(3)
+  recordedAt DateTime       @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  status     BreedingStatus @default(ACTIVE)
+  notes      String?
+
+  changesetId String? @map("changeset_id") @db.Uuid
+
+  lab       Lab                  @relation(fields: [labId], references: [id])
+  cage      Cage?                @relation(fields: [cageId], references: [id])
+  changeset Changeset?           @relation(fields: [changesetId], references: [id])
+  members   BreedingPairMember[]
+  litters   Litter[]
+
+  @@index([labId, status])
+  @@map("breeding_pairs")
+}
+
+model BreedingPairMember {
+  id       String       @id @default(uuid()) @db.Uuid
+  pairId   String       @map("pair_id") @db.Uuid
+  animalId String       @map("animal_id") @db.Uuid
+  role     BreedingRole
+  joinedAt DateTime     @map("joined_at") @db.Timestamptz(3)
+  leftAt   DateTime?    @map("left_at") @db.Timestamptz(3)
+
+  pair   BreedingPair @relation(fields: [pairId], references: [id], onDelete: Cascade)
+  animal Animal       @relation(fields: [animalId], references: [id])
+
+  @@unique([pairId, animalId])
+  @@index([animalId])
+  @@map("breeding_pair_members")
+}
+
+model Litter {
+  id     String  @id @default(uuid()) @db.Uuid
+  pairId String? @map("pair_id") @db.Uuid
+
+  bornAt     DateTime  @map("born_at") @db.Timestamptz(3)
+  recordedAt DateTime  @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  weanedAt   DateTime? @map("weaned_at") @db.Timestamptz(3)
+
+  /// Counted at birth and again at wean; the difference is real information
+  /// (culling, loss) and must not be overwritten by the later number.
+  pupCountAtBirth Int? @map("pup_count_at_birth")
+  pupCountAtWean  Int? @map("pup_count_at_wean")
+
+  notes       String?
+  changesetId String? @map("changeset_id") @db.Uuid
+
+  pair      BreedingPair? @relation(fields: [pairId], references: [id])
+  changeset Changeset?    @relation(fields: [changesetId], references: [id])
+  pups      Animal[]
+
+  @@index([pairId, bornAt])
+  @@index([bornAt])
+  @@map("litters")
+}
+
+// ---------------------------------------------------------------------------
+// Husbandry events
+// ---------------------------------------------------------------------------
+
+enum HusbandryEventType {
+  CAGE_CHANGE
+  HEALTH_CHECK
+  WEIGHT
+  WEANING
+  TAIL_SNIP
+  EAR_PUNCH
+  TREATMENT
+  BREEDING_SETUP
+  PLUG_CHECK
+  LITTER_BORN
+  GENOTYPE_SAMPLED
+  DEATH
+  EUTHANASIA
+  TRANSFER_IN
+  TRANSFER_OUT
+  NOTE
+
+  @@map("husbandry_event_type")
+}
+
+/// One table for every husbandry fact, with a per-type JSON payload validated
+/// by a Zod schema in the app layer. A column per event type would mean a
+/// migration every time the vet invents a new form.
+///
+/// Subject is an animal, a cage, or both (a treatment applied cage-wide). A
+/// CHECK constraint in the migration requires at least one.
+model HusbandryEvent {
+  id    String             @id @default(uuid()) @db.Uuid
+  labId String             @map("lab_id") @db.Uuid
+  type  HusbandryEventType
+
+  animalId String? @map("animal_id") @db.Uuid
+  cageId   String? @map("cage_id") @db.Uuid
+
+  /// The whole point: when it happened, versus when it was written down.
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  recordedById String? @map("recorded_by_id") @db.Uuid
+  notes        String?
+  payload      Json    @default("{}")
+
+  changesetId String? @map("changeset_id") @db.Uuid
+
+  lab        Lab        @relation(fields: [labId], references: [id])
+  animal     Animal?    @relation(fields: [animalId], references: [id])
+  cage       Cage?      @relation(fields: [cageId], references: [id])
+  recordedBy User?      @relation("EventRecordedBy", fields: [recordedById], references: [id])
+  changeset  Changeset? @relation(fields: [changesetId], references: [id])
+
+  @@index([animalId, occurredAt])
+  @@index([cageId, occurredAt])
+  @@index([labId, type, occurredAt])
+  @@index([occurredAt])
+  @@index([recordedAt])
+  @@map("husbandry_events")
+}
+
+// ---------------------------------------------------------------------------
+// Changesets — the unit of undo
+//
+// Every write the app makes is tagged with a changeset. "Undo" means reverting
+// one changeset's rows together, which is what makes bulk undo coherent: a
+// weaning that split one cage into four is one action to a human, and must be
+// one action to the undo button.
+// ---------------------------------------------------------------------------
+
+enum ChangesetKind {
+  MANUAL
+  IMPORT
+  SEED
+  REVERT
+  SYSTEM
+
+  @@map("changeset_kind")
+}
+
+model Changeset {
+  id      String        @id @default(uuid()) @db.Uuid
+  labId   String?       @map("lab_id") @db.Uuid
+  actorId String?       @map("actor_id") @db.Uuid
+  kind    ChangesetKind @default(MANUAL)
+
+  /// Short human phrase for the undo list — "Moved 4 mice to B-04-12".
+  summary String
+  reason  String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  /// Set on the changeset that *was* undone; points at the one that undid it.
+  revertedAt            DateTime? @map("reverted_at") @db.Timestamptz(3)
+  revertedByChangesetId String?   @unique @map("reverted_by_changeset_id") @db.Uuid
+
+  lab   Lab?  @relation(fields: [labId], references: [id])
+  actor User? @relation(fields: [actorId], references: [id])
+
+  revertedBy Changeset? @relation("Revert", fields: [revertedByChangesetId], references: [id])
+  reverts    Changeset? @relation("Revert")
+
+  cagePlacementsStarted   CagePlacement[]       @relation("CagePlacementChangeset")
+  cagePlacementsEnded     CagePlacement[]       @relation("CagePlacementEndChangeset")
+  animalPlacementsStarted AnimalCagePlacement[] @relation("AnimalPlacementChangeset")
+  animalPlacementsEnded   AnimalCagePlacement[] @relation("AnimalPlacementEndChangeset")
+  identifiers             AnimalIdentifier[]
+  genotypes               Genotype[]
+  events                  HusbandryEvent[]
+  breedingPairs           BreedingPair[]
+  litters                 Litter[]
+  coverage                CoverageAssignment[]
+  importBatch             ImportBatch?
+
+  @@index([labId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("changesets")
+}
+
+// ---------------------------------------------------------------------------
+// Spreadsheet ingestion
+//
+// Every import run is recorded row by row so a dry run can be shown as a diff,
+// a committed run can be undone as one changeset, and re-uploading the same
+// file is a no-op rather than a duplicate colony.
+// ---------------------------------------------------------------------------
+
+enum ImportStatus {
+  DRY_RUN
+  COMMITTED
+  FAILED
+  REVERTED
+
+  @@map("import_status")
+}
+
+enum ImportRowStatus {
+  CREATED
+  UPDATED
+  SKIPPED_DUPLICATE
+  SKIPPED_BLANK
+  FLAGGED
+  ERROR
+
+  @@map("import_row_status")
+}
+
+model ImportBatch {
+  id           String  @id @default(uuid()) @db.Uuid
+  labId        String  @map("lab_id") @db.Uuid
+  uploadedById String? @map("uploaded_by_id") @db.Uuid
+  changesetId  String? @unique @map("changeset_id") @db.Uuid
+
+  filename     String
+  /// SHA-256 of the uploaded bytes. Dedup key for "someone uploaded the same
+  /// file twice", checked before any row is parsed.
+  contentHash  String       @map("content_hash")
+  sourceFormat String       @map("source_format")
+  status       ImportStatus @default(DRY_RUN)
+
+  /// The column mapping actually used, so a run is reproducible and reviewable.
+  mapping Json @default("{}")
+
+  rowCount     Int @default(0) @map("row_count")
+  createdCount Int @default(0) @map("created_count")
+  updatedCount Int @default(0) @map("updated_count")
+  skippedCount Int @default(0) @map("skipped_count")
+  errorCount   Int @default(0) @map("error_count")
+
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  lab        Lab         @relation(fields: [labId], references: [id])
+  uploadedBy User?       @relation(fields: [uploadedById], references: [id])
+  changeset  Changeset?  @relation(fields: [changesetId], references: [id])
+  rows       ImportRow[]
+
+  @@index([labId, startedAt])
+  @@index([contentHash])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id        String          @id @default(uuid()) @db.Uuid
+  batchId   String          @map("batch_id") @db.Uuid
+  rowNumber Int             @map("row_number")
+  status    ImportRowStatus
+
+  /// Raw cells exactly as parsed, kept verbatim so an error message can quote
+  /// the sheet back to the person who uploaded it.
+  raw        Json
+  normalized Json?
+  messages   Json  @default("[]")
+
+  animalId String? @map("animal_id") @db.Uuid
+  cageId   String? @map("cage_id") @db.Uuid
+
+  batch  ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  animal Animal?     @relation(fields: [animalId], references: [id])
+  cage   Cage?       @relation(fields: [cageId], references: [id])
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@map("import_rows")
+}

@@ -8,13 +8,45 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # The test suite asserts on real Postgres behaviour — exclusion constraints,
+    # partial unique indexes, transactional rollback — so CI needs a real
+    # Postgres rather than a stub. btree_gist ships with the official image.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: colony
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/colony
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
+
+      # postinstall runs `prisma generate`; the generated client is not
+      # committed, so nothing typechecks until it has run.
       - run: npm ci
+
       - run: npm run lint
-      - run: npx tsc --noEmit
+      - run: npm run typecheck
+
+      - name: Apply migrations
+        run: npm run db:deploy
+
+      - run: npm test
+
       - run: npm run build
