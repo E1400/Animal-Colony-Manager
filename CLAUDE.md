@@ -1,0 +1,54 @@
+# CLAUDE.md
+
+Guidance for Claude (or any agent) working in this repo.
+
+## What this is
+
+Task 2 of the Salk AIRC RSE take-home: a mobile-first colony management app
+replacing a shared spreadsheet. Full brief and the build plan live in the
+`Salk Projects` claude.ai Project (`claude/github-repo-archive.md`,
+`claude/task2-plan.md`) — read those for the "why" before making architectural
+changes here.
+
+## Stack
+
+- Next.js (App Router) + TypeScript, Tailwind for styling.
+- Prisma ORM against Neon (serverless Postgres) — real migrations
+  (`prisma migrate dev` / `prisma migrate deploy`), never `db push` once a
+  migration exists.
+- Auth.js (NextAuth) with the GitHub provider for OIDC sign-in. Roles/permissions
+  live in our own DB, resolved server-side — never trust a client-supplied role.
+- Deployed on Vercel.
+
+## The data model is the point of this task
+
+Placement/location history (`CagePlacement`, `AnimalCagePlacement`) is an
+append-only event log. **Never add a "current location" foreign key column
+directly on `Animal` or `Cage`.** Current state is always a derived query
+(latest placement row with no end date). If you're tempted to cache current
+location on the parent row for query convenience, don't — write a DB view or
+an indexed query instead; the cache-drift bug is exactly the failure mode this
+schema exists to avoid.
+
+Similarly: `occurred_at` (when a husbandry event really happened) and
+`recorded_at` (when someone typed it in) are separate columns everywhere —
+facts arrive late and out of order in a real vivarium.
+
+Lab-local animal identifiers (ear tag/punch/toe number) are never a primary
+key — they live in `AnimalIdentifier`, scoped by namespace, because the same
+scheme is reused across labs and is sometimes wrong.
+
+## Conventions
+
+- Every write that a human can undo should happen inside a "changeset" (see
+  `src/lib/changeset.ts` once it exists) so bulk-undo has something coherent
+  to revert.
+- Soft delete (`deletedAt`/`deletedBy`/`deleteReason`) on `Animal` and `Cage` —
+  never a hard delete of either.
+- Mobile-first: build the small-viewport layout first, let desktop follow.
+- Tests: Vitest for schema/query correctness (this is where a colony manager
+  actually breaks), Playwright for E2E + a mobile-viewport pass.
+
+## Running locally
+
+_TODO once `.env.example` and the seed script exist._
