@@ -52,6 +52,34 @@ at once is refused by the database rather than by application code that loses to
 concurrent writes. Verified by attempting the violating insert and confirming
 the error, rather than assuming the DDL did what it read like.
 
+**The constraint caught my own seed data.** The first run of the seed script
+failed on `animal_cage_placements_interval_ordered`: I had picked each death
+date independently of when the animal was placed, so some animals died before
+they arrived in their cage. That's a class of nonsense a spreadsheet absorbs
+silently and then propagates into every downstream count. Worth recording as
+the moment the design paid for itself — the constraint wasn't decorative, it
+found a real bug within minutes of existing, in data I had written myself.
+
+## What I checked before believing it worked
+
+- **The constraints, by trying to violate them.** Four tests deliberately
+  bypass the operations layer and write to Prisma directly, asserting the
+  *database* refuses overlapping placements, a double-booked rack slot, an
+  inverted interval, and a duplicate active ear tag. Testing through the app
+  layer would only have proved the app remembered to check.
+- **The as-of query against a moving animal**, not just a static one: an animal
+  in cage A on June 1 and cage B on June 10 must answer "A" for June 3 and "B"
+  for today, from the same code path with a different timestamp.
+- **The half-open boundary.** At the exact instant of a handover the animal is
+  in exactly one cage, not zero and not both. This is the kind of thing that
+  looks fine until a report double-counts.
+- **Transactional rollback**, by forcing a bulk move to fail partway and
+  asserting the first animal's placement did not survive. A changeset that can
+  half-apply is worse than no changeset.
+- **Migrations from empty**, applied by `prisma migrate deploy` against a real
+  Postgres rather than `db push`, so what CI and production run is what was
+  tested.
+
 ## Vendored agent skills
 
 `prisma init` silently installed nine Prisma-authored skill packs into
@@ -59,7 +87,3 @@ the error, rather than assuming the DDL did what it read like.
 not this project's AI setup, and committing them under `.claude/` would
 misrepresent what's in this repo — so they're gitignored (regenerate with
 `npx prisma skills sync`).
-
-## What I checked before believing it worked
-
-_TODO._
