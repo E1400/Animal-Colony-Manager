@@ -5,10 +5,11 @@ Guidance for Claude (or any agent) working in this repo.
 ## What this is
 
 Task 2 of the Salk AIRC RSE take-home: a mobile-first colony management app
-replacing a shared spreadsheet. Full brief and the build plan live in the
-`Salk Projects` claude.ai Project (`claude/github-repo-archive.md`,
-`claude/task2-plan.md`) — read those for the "why" before making architectural
-changes here.
+replacing a shared spreadsheet. **Read `task2-plan.md` in this repo root
+first** — it has the full architecture reasoning, the data model, and a
+running status of what's done vs. not, so you don't have to re-derive
+decisions or guess what's already built. Update its milestone checklist as
+you complete things so it stays a true status doc, not just a plan.
 
 ## Stack
 
