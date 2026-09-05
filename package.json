@@ -12,6 +12,8 @@
     "test": "vitest run",
     "db:up": "prisma dev -d -n colony",
     "db:down": "prisma dev stop -n colony",
+    "db:up:test": "prisma dev -d -n colony-test",
+    "db:down:test": "prisma dev stop -n colony-test",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",

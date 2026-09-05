@@ -72,9 +72,19 @@ npm run dev
 `npm run db:down` stops the database. `npm run db:reset` drops, re-migrates and
 re-seeds it.
 
-`npm test` runs Vitest against a **separate** `colony_test` database on the same
-server, created and migrated automatically, so testing never wipes the seeded
-colony you are looking at.
+Tests need a **second database server**, because the suite truncates every
+table between tests:
+
+```bash
+npm run db:up:test       # prints a URL — put it in .env as TEST_DATABASE_URL
+npm test
+```
+
+A different database name or `?schema=` on the *same* dev server is not
+isolation: that server routes every database and schema name to one store, so
+both look correct and silently share the development colony. Global setup
+refuses to run if it detects the seeded colony in the target, so a
+misconfiguration fails loudly instead of destroying data.
 
 The seed is deterministic (fixed PRNG seed), so the demo, screenshots and tests
 all describe the same colony. Re-running produces identical data.

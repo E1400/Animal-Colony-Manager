@@ -1,29 +1,37 @@
 import "dotenv/config";
 
 /**
- * Tests get their own database on the same server as development, so running
- * `npm test` never destroys the seeded colony. Override with TEST_DATABASE_URL
- * if you want to point somewhere else entirely.
+ * Where the test suite is allowed to write.
+ *
+ * This must be a *separate database server* from development, not just a
+ * different database or schema name on the same one. The local server started
+ * by `npm run db:up` ignores both: every connection lands in the same store
+ * regardless of the database in the URL or the `?schema=` parameter, so
+ * `/colony_test` and `?schema=colony_test` both look like isolation and
+ * silently share the development colony. Isolation on that server is per
+ * *instance*, which is why the test database is a second `prisma dev` server
+ * on its own port.
+ *
+ * On a real Postgres (CI uses a postgres:17 service container) a plain
+ * DATABASE_URL is already a dedicated database and needs nothing else.
  */
 export function testDatabaseUrl(): string {
-  if (process.env.TEST_DATABASE_URL) return process.env.TEST_DATABASE_URL;
+  const explicit = process.env.TEST_DATABASE_URL;
+  if (explicit) return explicit;
 
-  const base = process.env.DATABASE_URL;
-  if (!base) {
-    throw new Error(
-      "DATABASE_URL is not set — start a local database with `npm run db:up` " +
-        "and copy the URL it prints into .env",
-    );
+  // CI points DATABASE_URL at a throwaway Postgres, so using it is correct
+  // there. Locally it is the development colony, and using it would wipe it.
+  if (process.env.CI) {
+    const base = process.env.DATABASE_URL;
+    if (base) return base;
   }
 
-  const url = new URL(base);
-  url.pathname = "/colony_test";
-  return url.toString();
-}
-
-/** The same server, but the default database — used to CREATE the test one. */
-export function adminDatabaseUrl(): string {
-  const url = new URL(testDatabaseUrl());
-  url.pathname = "/postgres";
-  return url.toString();
+  throw new Error(
+    "TEST_DATABASE_URL is not set.\n\n" +
+      "Tests need their own database server — the local dev server shares one\n" +
+      "store across every database and schema name, so pointing tests at it\n" +
+      "would destroy your seeded colony.\n\n" +
+      "  npm run db:up:test        # starts a second server, prints a URL\n" +
+      "  # put that URL in .env as TEST_DATABASE_URL\n",
+  );
 }

@@ -2,14 +2,19 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "@/lib/db";
 
-/** Wipes every table between tests. Cheap at fixture scale. */
+/**
+ * Wipes every table between tests. Cheap at fixture scale.
+ *
+ * Safe only because global setup has already proved this is not the
+ * development database — see tests/global-setup.ts.
+ */
 export async function resetDb() {
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
+    WHERE schemaname = current_schema() AND tablename <> '_prisma_migrations'
   `;
   if (!tables.length) return;
-  const list = tables.map((t) => `"public"."${t.tablename}"`).join(", ");
+  const list = tables.map((t) => `"${t.tablename}"`).join(", ");
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
 }
 

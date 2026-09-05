@@ -60,6 +60,27 @@ silently and then propagates into every downstream count. Worth recording as
 the moment the design paid for itself — the constraint wasn't decorative, it
 found a real bug within minutes of existing, in data I had written myself.
 
+**Test isolation that looked right and wasn't.** I pointed the suite at a
+`colony_test` database on the same local server, and everything corroborated
+it: the runner logged `database "colony_test"`, migrations applied there, and
+all 16 tests passed. Then a routine count showed the development colony had
+415 animals replaced by 3 — the suite had been truncating the seeded data all
+along. The local dev server terminates every connection at the same underlying
+store regardless of the database in the URL; asking for `/colony_test` silently
+lands in the dev database, and `SELECT current_database()` cheerfully answers
+`template1` for a database name that was never created. Switching to
+`?schema=colony_test` failed the same way, more subtly: the schema was created
+and migrated, but writes still landed in `public` — `colony_test.animals` held
+0 rows while `public` held 444.
+
+The lesson isn't about Prisma. It's that every signal I had was consistent with
+isolation working, and none of them actually tested the claim. The check that
+found it was the dumb one: count the rows in the database I was trying to
+protect, before and after. Isolation on that server is per *instance*, so tests
+now run against a second server on its own port, and global setup refuses to
+start if it finds the seeded colony in the target — a misconfiguration now
+fails loudly instead of quietly deleting data.
+
 ## What I checked before believing it worked
 
 - **The constraints, by trying to violate them.** Four tests deliberately
@@ -79,6 +100,10 @@ found a real bug within minutes of existing, in data I had written myself.
 - **Migrations from empty**, applied by `prisma migrate deploy` against a real
   Postgres rather than `db push`, so what CI and production run is what was
   tested.
+- **That the test suite does not touch the development colony** — by counting
+  its rows before and after a full `npm test`, not by reading the connection
+  string and believing it. That check is the only reason the isolation bug
+  above was caught.
 
 ## Vendored agent skills
 
