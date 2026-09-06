@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
+/*
+ * Mobile-first, and built for the actual environment: a phone held one-handed
+ * in a gloved hand, at arm's length, under vivarium lighting. That means large
+ * type, high contrast, and tap targets no smaller than 44px.
+ */
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --surface: #ffffff;
+  --surface-muted: #f4f4f5;
+  --border: #d4d4d8;
+  --foreground: #18181b;
+  --muted: #52525b;
+  --accent: #0f766e;
+  --accent-contrast: #ffffff;
+  --warn: #b45309;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #09090b;
+    --surface: #18181b;
+    --surface-muted: #27272a;
+    --border: #3f3f46;
+    --foreground: #fafafa;
+    --muted: #a1a1aa;
+    --accent: #2dd4bf;
+    --accent-contrast: #042f2e;
+    --warn: #fbbf24;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Visible focus for keyboard users, on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+ * Print: cage cards are physical objects. Drop the chrome, force ink-on-paper
+ * colours, and keep a card from splitting across two sheets.
+ */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .print-card {
+    break-inside: avoid;
+    border: 1.5pt solid #000;
+    box-shadow: none;
+  }
+
+  a::after {
+    content: "";
+  }
 }
