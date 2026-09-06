@@ -16,8 +16,12 @@ import { prisma } from "@/lib/db";
  * leave, and coverage windows close; a self-contained token would keep working
  * until it expired. A database session can be revoked the moment it should be.
  */
+// Empty strings count as unset: a placeholder pasted into a dashboard is a
+// very common way to end up "configured" with nothing behind it.
 const githubConfigured =
-  !!process.env.AUTH_GITHUB_ID && !!process.env.AUTH_GITHUB_SECRET;
+  !!process.env.AUTH_GITHUB_ID?.trim() && !!process.env.AUTH_GITHUB_SECRET?.trim();
+
+const devSignInEnabled = !githubConfigured && process.env.NODE_ENV !== "production";
 
 /**
  * A local-only sign-in used when no GitHub OAuth App is configured.
@@ -28,10 +32,9 @@ const githubConfigured =
  * password or creates an account — it only matches an email that is already a
  * seeded member of a lab.
  */
-const devProviders =
-  githubConfigured || process.env.NODE_ENV === "production"
-    ? []
-    : [
+const devProviders = !devSignInEnabled
+  ? []
+  : [
         Credentials({
           id: "seeded-user",
           name: "Seeded lab member",
@@ -78,3 +81,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 
 export const isGithubConfigured = githubConfigured;
+
+/**
+ * Whether the local seeded-user sign-in is actually registered.
+ *
+ * Distinct from `!isGithubConfigured`: in production with no OAuth app, neither
+ * provider exists and there is genuinely no way to sign in. The sign-in page
+ * has to say that rather than offering a button wired to nothing.
+ */
+export const isDevSignInEnabled = devSignInEnabled;

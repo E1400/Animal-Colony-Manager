@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth, isGithubConfigured, signIn } from "@/lib/auth/config";
+import { auth, isDevSignInEnabled, isGithubConfigured, signIn } from "@/lib/auth/config";
 import { prisma } from "@/lib/db";
 import { Card, PageHeader } from "@/components/ui";
 import { humanize } from "@/components/ui";
@@ -12,7 +12,7 @@ export default async function SignInPage() {
   if (session?.user) redirect("/");
 
   // Only used by the local sign-in below, and only when there is no OAuth app.
-  const seeded = isGithubConfigured
+  const seeded = !isDevSignInEnabled
     ? []
     : await prisma.user.findMany({
         where: { memberships: { some: {} } },
@@ -46,6 +46,17 @@ export default async function SignInPage() {
             Continue with GitHub
           </button>
         </form>
+      ) : !isDevSignInEnabled ? (
+        <Card>
+          <h2 className="text-base font-semibold">Sign-in is not configured</h2>
+          <p className="mt-2 text-base leading-relaxed text-muted">
+            This deployment has no GitHub OAuth app, and the local seeded
+            sign-in is disabled outside development. Set{" "}
+            <code className="font-mono">AUTH_GITHUB_ID</code> and{" "}
+            <code className="font-mono">AUTH_GITHUB_SECRET</code> to enable
+            sign-in. Everything remains readable without it.
+          </p>
+        </Card>
       ) : (
         <Card>
           <h2 className="text-base font-semibold">Local sign-in</h2>
