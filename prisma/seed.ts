@@ -113,6 +113,22 @@ async function main() {
 
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
+  // Refuse to overwrite a colony that already exists.
+  //
+  // The seed truncates every table, which is right for bootstrapping an empty
+  // database and catastrophic for one in use. Exiting successfully rather than
+  // failing means this can sit in a deploy pipeline as a one-time bootstrap
+  // without turning every subsequent deploy into a data loss event.
+  const existingLabs = await prisma.lab.count();
+  if (existingLabs > 0 && !process.env.SEED_FORCE) {
+    console.log(
+      `Database already contains ${existingLabs} lab(s) — leaving it alone.\n` +
+        "Set SEED_FORCE=1 to wipe and reseed anyway.",
+    );
+    await prisma.$disconnect();
+    return;
+  }
+
   console.log("Clearing existing data…");
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
