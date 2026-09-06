@@ -33,11 +33,75 @@ vacation.
 
 ## Setup (cold clone)
 
-_TODO — filled in as the app takes shape. Will cover: cloning, `npm install`,
-the `.env` variables needed (Neon `DATABASE_URL`, GitHub OAuth
-`AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET`, `AUTH_SECRET`), running migrations and
-the seed script, and starting the dev server — all without needing Docker,
-Python, or a locally-installed database._
+No Docker, no Python, no locally-installed Postgres. Node 22+ is the only
+prerequisite.
+
+```bash
+git clone https://github.com/E1400/Animal-Colony-Manager.git
+cd Animal-Colony-Manager
+cp .env.example .env
+npm install            # postinstall runs `prisma generate`
+
+npm run db:up          # starts a local Postgres, prints a URL
+                       # paste it into .env as DATABASE_URL
+npm run db:deploy      # apply migrations
+npm run db:seed        # ~415 animals, 128 cages, breeding pairs, litters
+
+npm run dev            # http://localhost:3000
+```
+
+`npm run db:down` stops the database; `npm run db:reset` drops, re-migrates and
+re-seeds it.
+
+The seed is deterministic — a fixed PRNG seed — so the demo, the screenshots
+and the tests all describe the same colony.
+
+### Running the tests
+
+The suite truncates every table between tests, so it needs its own database
+**server** — a different database name or `?schema=` on the dev server is not
+isolation, because that server routes every name to the same store.
+
+```bash
+npm run db:up:test     # second server; put its URL in .env as TEST_DATABASE_URL
+npm test
+```
+
+Global setup refuses to run if it finds the seeded colony in the target, so a
+misconfiguration fails loudly instead of destroying data.
+
+## Deployment
+
+Deployed on Vercel against managed Postgres. Two things are non-obvious:
+
+**The database must support `btree_gist`.** The placement tables enforce
+non-overlapping intervals with Postgres exclusion constraints, which need that
+extension. Neon and Prisma Postgres both provide it; a provider that does not
+will fail on the second migration. This has been verified end to end — the full
+test suite, including the four tests that assert the *database* rejects
+overlapping placements, passes against managed Postgres, not just locally.
+
+**Migrations run at deploy, not by hand.** `vercel-build` runs
+`prisma migrate deploy && next build`, so a deploy that ships schema changes
+applies them first and fails the build rather than serving code against an
+older schema.
+
+Environment variables to set in the Vercel project:
+
+| Variable | Needed for | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | everything | Pooled connection string from your provider |
+| `AUTH_SECRET` | sign-in | `npx auth secret` or `openssl rand -base64 32` |
+| `AUTH_GITHUB_ID` | sign-in | GitHub OAuth App client ID |
+| `AUTH_GITHUB_SECRET` | sign-in | GitHub OAuth App client secret |
+
+GitHub allows one callback URL per OAuth App, so register two apps — one for
+`http://localhost:3000/api/auth/callback/github` and one for
+`https://<your-domain>/api/auth/callback/github`.
+
+Note that `node-postgres` now warns that `sslmode=require` will stop implying
+certificate verification. Prefer `sslmode=verify-full` on the production
+connection string.
 
 ## Data model — what I chose and why
 
