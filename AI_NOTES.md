@@ -113,6 +113,40 @@ fails loudly instead of quietly deleting data.
   `http://localhost:3000/cages/CG-1000`. Server-generated SVG through a browser
   render to a working URL, rather than trusting that a thing shaped like a QR
   code is one.
+- **The offline queue by actually going offline**, not by reading the code:
+  dropped the browser's connection mid-session, confirmed the write landed in
+  `localStorage` and the pending count appeared, then restored the connection
+  and confirmed the queue drained to zero and the entry showed up in the cage's
+  history.
+
+## Known not verified
+
+- **Camera capture on real iOS Safari.** The scanner is written against ZXing
+  specifically because iOS Safari lacks `BarcodeDetector`, and the manual-entry
+  fallback and page behaviour are tested — but `getUserMedia` needs an HTTPS
+  origin, so the camera path has only run in headless Chromium. Until this is
+  deployed and opened on a physical phone, treat "scanning works on iOS" as
+  unproven. It is the last thing on the mobile milestone for that reason.
+
+**Where I narrowed the offline feature on purpose.** The plan called for an
+offline write queue. The obvious reading is "queue every write", and that is
+the wrong product: merging offline *structural* changes — moving animals
+between cages, weaning a litter into four — is a real distributed-systems
+problem, and getting it subtly wrong corrupts colony history in a way that is
+very hard to notice and impossible to unpick later. So the queue covers only
+the flat, append-only actions someone performs standing at a rack, where the
+alternative is a spinner that fails and an entry nobody ever writes down.
+Structural moves still require a connection and say so. The narrower feature is
+the more defensible one.
+
+**A lint rule I argued with and then agreed with.** `react-hooks/set-state-in-effect`
+flagged the queue-drain effect. My first instinct was that it was a false
+positive, since `drain()` only sets state after an `await`. But the fix it
+pushed me toward — deferring the flush with a timeout rather than running it
+inline on mount — is genuinely better: flushing is a network round trip and has
+no business sitting between mount and first paint. Reading `localStorage` for
+the pending count also moved to `useSyncExternalStore`, which is what stops the
+server and first client render from disagreeing about queue length.
 
 ## Vendored agent skills
 
