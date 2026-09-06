@@ -26,7 +26,10 @@ export default async function ActivityPage() {
   const actor = await getCurrentActor();
   const changesets = await recentChangesets({ limit: 50 });
 
-  const grant = actor.labId ? await resolveGrant(actor.id, actor.labId) : null;
+  // A freshly deployed database has no users yet. The log is still readable;
+  // there is simply nobody to attribute an undo to.
+  const grant =
+    actor?.labId != null ? await resolveGrant(actor.id, actor.labId) : null;
 
   return (
     <>
@@ -48,13 +51,17 @@ export default async function ActivityPage() {
       ) : null}
 
       {changesets.length === 0 ? (
-        <EmptyState>Nothing has been recorded yet.</EmptyState>
+        <EmptyState>
+          Nothing has been recorded yet.
+          {actor === null ? " This database has not been seeded." : ""}
+        </EmptyState>
       ) : (
         <ul className="grid gap-2">
           {changesets.map((cs) => {
-            const verdict = grant
-              ? canUndoChangeset(grant, cs, actor.id)
-              : { allowed: false, reason: "Sign in to undo." };
+            const verdict =
+              grant && actor
+                ? canUndoChangeset(grant, cs, actor.id)
+                : { allowed: false, reason: "Sign in to undo." };
 
             const touched =
               cs._count.animalPlacementsStarted +

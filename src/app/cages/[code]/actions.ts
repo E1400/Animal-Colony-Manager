@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentActor } from "@/lib/actor";
+import { requireActor } from "@/lib/actor";
 import { prisma } from "@/lib/db";
 import { logEvent } from "@/lib/operations/events";
 
@@ -51,7 +51,7 @@ export async function logCageChange(
   occurredAtIso?: string,
 ): Promise<ActionResult> {
   try {
-    const [cage, actor] = await Promise.all([resolveCage(code), getCurrentActor()]);
+    const [cage, actor] = await Promise.all([resolveCage(code), requireActor()]);
 
     await logEvent({
       type: "CAGE_CHANGE",
@@ -78,7 +78,7 @@ export async function logHealthCheck(
   if (!text) return { ok: false, error: "Add a note before saving." };
 
   try {
-    const [cage, actor] = await Promise.all([resolveCage(code), getCurrentActor()]);
+    const [cage, actor] = await Promise.all([resolveCage(code), requireActor()]);
 
     await logEvent({
       type: "HEALTH_CHECK",
@@ -113,7 +113,7 @@ export async function logWeight(
   }
 
   try {
-    const [cage, actor] = await Promise.all([resolveCage(code), getCurrentActor()]);
+    const [cage, actor] = await Promise.all([resolveCage(code), requireActor()]);
 
     const animal = await prisma.animal.findFirst({
       where: { id: animalId, deletedAt: null },
