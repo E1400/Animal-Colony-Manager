@@ -3,6 +3,25 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+/**
+ * Migrations must not run over a connection pooler.
+ *
+ * `prisma migrate deploy` takes a Postgres advisory lock, which pgbouncer in
+ * transaction-pooling mode does not support — the migration either hangs or
+ * fails with a confusing error. Neon (and Vercel's Neon integration) hand out a
+ * pooled `DATABASE_URL` for the app plus an unpooled one under a second name,
+ * so migrations use the direct connection when it exists and fall back to
+ * `DATABASE_URL` locally, where there is no pooler in the way.
+ *
+ * The app runtime keeps using the pooled URL — see src/lib/db.ts — because that
+ * is the right connection for serverless request handling.
+ */
+const migrationUrl =
+  process.env.DIRECT_DATABASE_URL ??
+  process.env.DATABASE_URL_UNPOOLED ??
+  process.env.POSTGRES_URL_NON_POOLING ??
+  process.env.DATABASE_URL;
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -10,6 +29,6 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: migrationUrl,
   },
 });

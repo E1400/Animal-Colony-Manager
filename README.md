@@ -90,10 +90,20 @@ Environment variables to set in the Vercel project:
 
 | Variable | Needed for | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | everything | Pooled connection string from your provider |
+| `DATABASE_URL` | everything | Pooled connection string; used by the app at runtime |
+| `DIRECT_DATABASE_URL` | migrations | Unpooled connection. Optional but strongly recommended — see below |
 | `AUTH_SECRET` | sign-in | `npx auth secret` or `openssl rand -base64 32` |
 | `AUTH_GITHUB_ID` | sign-in | GitHub OAuth App client ID |
 | `AUTH_GITHUB_SECRET` | sign-in | GitHub OAuth App client secret |
+
+**Migrations must not run through a connection pooler.** `prisma migrate deploy`
+takes a Postgres advisory lock, which pgbouncer in transaction-pooling mode does
+not support, so the migration hangs or fails confusingly. `prisma7.config.ts`
+therefore prefers `DIRECT_DATABASE_URL`, then `DATABASE_URL_UNPOOLED`, then
+`POSTGRES_URL_NON_POOLING`, falling back to `DATABASE_URL` for local development
+where no pooler is involved. Vercel's Neon integration sets the unpooled
+variable automatically, so this usually needs no action — but if you paste a
+connection string in by hand, paste the unpooled one too.
 
 GitHub allows one callback URL per OAuth App, so register two apps — one for
 `http://localhost:3000/api/auth/callback/github` and one for
