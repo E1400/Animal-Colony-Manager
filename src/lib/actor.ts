@@ -1,44 +1,48 @@
+import { auth } from "@/lib/auth/config";
 import { prisma } from "@/lib/db";
 
 export type Actor = { id: string; name: string | null; labId: string | null };
 
 /**
- * Who is performing a write.
+ * Who is acting, resolved from the session on the server.
  *
- * PLACEHOLDER until Auth.js is wired. Every write is already attributed to a
- * real user row and tagged with a changeset, so switching this to a session
- * lookup is a change to this one function rather than to every call site —
- * which is the reason it exists this early.
+ * The session carries an identity and nothing else — no role, no lab. Those
+ * are looked up here from our own tables, so what someone may do can be
+ * changed or revoked without waiting for a token to expire, and a tampered
+ * cookie cannot grant anything.
  *
- * It resolves server-side and is never accepted from the client, the property
- * that has to keep holding once this becomes real authorization.
- *
- * Returns null rather than throwing when there is nobody: a freshly deployed,
- * unseeded database is a normal state, and read-only pages must still render
- * in it. Write paths use `requireActor` instead.
+ * Returns null when nobody is signed in, or when the signed-in identity has no
+ * membership yet. Both are ordinary states: read-only pages still render, and
+ * a new GitHub account with no lab membership should see an empty colony
+ * rather than an error.
  */
 export async function getCurrentActor(): Promise<Actor | null> {
-  const actor = await prisma.user.findFirst({
-    where: { memberships: { some: { role: "LAB_MANAGER" } } },
-    include: { memberships: { include: { lab: true }, take: 1 } },
-  });
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return null;
 
-  if (!actor) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      memberships: { select: { labId: true }, take: 1 },
+    },
+  });
+  if (!user) return null;
 
   return {
-    id: actor.id,
-    name: actor.name,
-    labId: actor.memberships[0]?.labId ?? null,
+    id: user.id,
+    name: user.name,
+    labId: user.memberships[0]?.labId ?? null,
   };
 }
 
-/** For write paths, where having no actor genuinely is an error. */
+/** For write paths, where having nobody to attribute a change to is an error. */
 export async function requireActor(): Promise<Actor> {
   const actor = await getCurrentActor();
   if (!actor) {
-    throw new Error(
-      "No user account exists yet. Seed the database before recording anything.",
-    );
+    throw new Error("You need to be signed in to record that.");
   }
   return actor;
 }
