@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCageByCode } from "@/lib/queries/views";
+import { CageActions } from "@/components/cage-actions";
 import {
   Badge,
   Card,
@@ -56,6 +57,8 @@ export default async function CagePage({ params }: PageProps<"/cages/[code]">) {
           <Field label="Lab" value={cage.lab.name} />
         </dl>
       </Card>
+
+      <CageActions code={cage.code} />
 
       <section className="mt-6">
         <h2 className="mb-2 text-lg font-semibold">Occupants</h2>
