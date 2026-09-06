@@ -86,6 +86,21 @@ overlapping placements, passes against managed Postgres, not just locally.
 applies them first and fails the build rather than serving code against an
 older schema.
 
+**Seeding a hosted database.** The seed refuses to touch a database that
+already contains a lab, and refuses a hosted `DATABASE_URL` outright unless
+`SEED_ALLOW_REMOTE=1` is set — it truncates every table, which is right for an
+empty database and catastrophic for one in use. To bootstrap a fresh
+deployment without copying credentials onto a laptop, temporarily insert the
+seed into the build:
+
+```
+"vercel-build": "prisma migrate deploy && SEED_ALLOW_REMOTE=1 prisma db seed && next build"
+```
+
+deploy once, then take it back out. The build environment already holds
+`DATABASE_URL`, so nothing sensitive has to move. `SEED_FORCE=1` overrides the
+already-populated check, and is the only way to wipe a live colony.
+
 Environment variables to set in the Vercel project:
 
 | Variable | Needed for | Notes |
