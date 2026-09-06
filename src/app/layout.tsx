@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { SessionBar } from "@/components/session-bar";
 import { TopNav } from "@/components/top-nav";
 import "./globals.css";
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to content
         </a>
         <TopNav />
+        <SessionBar />
         <main id="main" className="mx-auto w-full max-w-3xl px-4 pb-10 pt-5">
           {children}
         </main>
