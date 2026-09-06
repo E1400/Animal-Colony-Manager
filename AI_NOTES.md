@@ -104,6 +104,15 @@ fails loudly instead of quietly deleting data.
   its rows before and after a full `npm test`, not by reading the connection
   string and believing it. That check is the only reason the isolation bug
   above was caught.
+- **The mobile layout on a real mobile viewport**, driven with Playwright at
+  390×844 rather than a narrowed desktop window: asserting zero horizontal
+  overflow and that every link, button and input clears 44px. That found two
+  buttons at 38px which looked fine to the eye.
+- **That the cage-card QR actually scans** — decoded straight back out of the
+  rendered screenshot with OpenCV, returning
+  `http://localhost:3000/cages/CG-1000`. Server-generated SVG through a browser
+  render to a working URL, rather than trusting that a thing shaped like a QR
+  code is one.
 
 ## Vendored agent skills
 
