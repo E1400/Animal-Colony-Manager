@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentActor } from "@/lib/actor";
+import { requireActor } from "@/lib/actor";
 import { resolveGrant } from "@/lib/auth/grants";
 import { canUndoChangeset } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
@@ -19,7 +19,7 @@ export type UndoResult = { ok: true; message: string } | { ok: false; error: str
  */
 export async function undoChangeset(changesetId: string): Promise<UndoResult> {
   try {
-    const actor = await getCurrentActor();
+    const actor = await requireActor();
 
     const changeset = await prisma.changeset.findUnique({
       where: { id: changesetId },

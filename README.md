@@ -1,6 +1,6 @@
 # Animal Colony Manager
 
-**Live demo:** _TODO — Vercel URL_
+**Live demo:** https://animal-colony-manager.vercel.app
 **Demo video:** _TODO — 2-3 min walkthrough_
 
 A phone-friendly system for tracking mice, cages, husbandry, and staff coverage
