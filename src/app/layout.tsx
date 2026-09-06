@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { BottomNav } from "@/components/bottom-nav";
+import { TopNav } from "@/components/top-nav";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -36,11 +36,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        {/* pb-24 keeps content clear of the fixed bottom nav on small screens. */}
-        <main id="main" className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4 sm:pb-8">
+        <TopNav />
+        <main id="main" className="mx-auto w-full max-w-3xl px-4 pb-10 pt-5">
           {children}
         </main>
-        <BottomNav />
       </body>
     </html>
   );
