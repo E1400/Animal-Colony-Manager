@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/cages", label: "Cages" },
   { href: "/scan", label: "Scan" },
   { href: "/search", label: "Search" },
+  { href: "/activity", label: "Activity" },
 ] as const;
 
 export function TopNav() {
@@ -25,16 +26,21 @@ export function TopNav() {
     >
       {/* Keeps the bar clear of the notch on iOS. */}
       <div className="h-[env(safe-area-inset-top)]" />
-      <ul className="mx-auto flex w-full max-w-3xl px-2">
+      {/*
+        Five labels do not fit across a 390px phone. Rather than drop to icons —
+        which fail the "someone new to the lab at 11pm" test — the bar scrolls
+        horizontally, so a label is never clipped beyond reach.
+      */}
+      <ul className="mx-auto flex w-full max-w-3xl overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {LINKS.map((link) => {
           const active =
             link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
           return (
-            <li key={link.href}>
+            <li key={link.href} className="shrink-0">
               <Link
                 href={link.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-14 items-center px-4 text-base font-medium transition-colors ${
+                className={`flex min-h-14 items-center whitespace-nowrap px-3 text-base font-medium transition-colors ${
                   active
                     ? "text-accent"
                     : "text-muted hover:text-foreground"
