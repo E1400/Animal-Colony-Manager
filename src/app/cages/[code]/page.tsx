@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { getCurrentActor } from "@/lib/actor";
+import { resolveGrant } from "@/lib/auth/grants";
+import { can } from "@/lib/auth/permissions";
 import { getCageByCode } from "@/lib/queries/views";
 import { CageActions } from "@/components/cage-actions";
 import {
@@ -20,6 +23,12 @@ export default async function CagePage({ params }: PageProps<"/cages/[code]">) {
   const { code } = await params;
   const data = await getCageByCode(decodeURIComponent(code));
   if (!data) notFound();
+
+  // Reading a cage needs no account; recording against it does. Showing the
+  // buttons to someone who cannot use them only produces a failure on tap.
+  const actor = await getCurrentActor();
+  const grant = actor?.labId ? await resolveGrant(actor.id, actor.labId) : null;
+  const canLog = grant ? can(grant, "event:log") : false;
 
   const { cage, address, rack, room, since, occupants, events } = data;
 
@@ -58,7 +67,19 @@ export default async function CagePage({ params }: PageProps<"/cages/[code]">) {
         </dl>
       </Card>
 
-      <CageActions code={cage.code} />
+      {canLog ? (
+        <CageActions code={cage.code} />
+      ) : (
+        <section className="no-print mt-6" aria-label="Quick actions">
+          <h2 className="mb-2 text-lg font-semibold">Log</h2>
+          <Link
+            href="/signin"
+            className="flex min-h-14 w-full items-center justify-center rounded-xl border border-border px-4 text-base font-semibold hover:border-accent"
+          >
+            Sign in to record a change
+          </Link>
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="mb-2 text-lg font-semibold">Occupants</h2>
