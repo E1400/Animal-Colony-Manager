@@ -597,10 +597,6 @@ function Finished({
         {counts.UPDATED ? `, ${counts.UPDATED} updated` : ""}
         {counts.ERROR ? `, ${counts.ERROR} rejected and recorded` : ""}.
       </p>
-      <p className="mt-2 text-base text-muted">
-        This landed as a single entry in the activity log, so it can be undone in one
-        action if it turns out to be wrong.
-      </p>
       <div className="mt-5 flex flex-wrap gap-2">
         <Link
           href="/activity"

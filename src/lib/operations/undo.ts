@@ -365,16 +365,29 @@ type WithSubjects = {
  * to the cage and the animal it was about. Cages are labelled by code and
  * animals by their primary ear tag, since that is what is written on them.
  */
-export function changesetLinks(cs: WithSubjects): Array<{ label: string; href: string }> {
-  const links = new Map<string, { label: string; href: string }>();
+export type ChangesetLink = {
+  kind: "cage" | "animal";
+  label: string;
+  href: string;
+};
+
+export function changesetLinks(cs: WithSubjects): ChangesetLink[] {
+  const links = new Map<string, ChangesetLink>();
 
   const addCage = (code?: string) => {
-    if (code) links.set(`c:${code}`, { label: code, href: `/cages/${encodeURIComponent(code)}` });
+    if (code) {
+      links.set(`c:${code}`, {
+        kind: "cage",
+        label: code,
+        href: `/cages/${encodeURIComponent(code)}`,
+      });
+    }
   };
   const addAnimal = (a?: { id: string; identifiers: Array<{ value: string }> } | null) => {
     if (!a) return;
     links.set(`a:${a.id}`, {
-      label: a.identifiers[0]?.value ?? "animal",
+      kind: "animal",
+      label: a.identifiers[0]?.value ?? "untagged",
       href: `/animals/${a.id}`,
     });
   };
@@ -389,7 +402,15 @@ export function changesetLinks(cs: WithSubjects): Array<{ label: string; href: s
   }
   for (const p of cs.cagePlacementsStarted) addCage(p.cage.code);
 
+  // Cages first, then animals. A bare "CG-1000" and a bare "2101" are hard to
+  // tell apart at a glance, so the caller labels them — grouping keeps the
+  // labels from having to repeat on every chip.
+  //
   // A bulk import touches hundreds of records; listing them all would bury the
   // row. Show a handful and let the count speak for the rest.
-  return [...links.values()].slice(0, 6);
+  const all = [...links.values()];
+  return [
+    ...all.filter((l) => l.kind === "cage"),
+    ...all.filter((l) => l.kind === "animal"),
+  ].slice(0, 8);
 }
