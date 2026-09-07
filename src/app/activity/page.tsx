@@ -35,7 +35,7 @@ export default async function ActivityPage() {
     <>
       <PageHeader
         title="Activity"
-        subtitle="Every change, who made it, and how to take it back."
+        subtitle="Every change, who made it, and a button to undo it."
       />
 
       {grant && grant.via.some((v) => v.source === "coverage") ? (

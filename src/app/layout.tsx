@@ -37,8 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <TopNav />
-        <SessionBar />
+        <TopNav account={<SessionBar />} />
         <main id="main" className="mx-auto w-full max-w-3xl px-4 pb-10 pt-5">
           {children}
         </main>

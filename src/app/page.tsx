@@ -15,7 +15,7 @@ export default async function Home() {
     <>
       <PageHeader
         title="Colony"
-        subtitle="Everything is derived from placement history — nothing here is a cached location."
+        subtitle={`${summary.animals} animals across ${summary.cages} cages, and where every one of them has been.`}
       />
 
       <SearchBox autoFocus={false} />
@@ -49,12 +49,11 @@ export default async function Home() {
       </nav>
 
       <Card className="mt-5">
-        <h2 className="text-base font-semibold">Why this looks the way it does</h2>
+        <h2 className="text-base font-semibold">Nothing here is overwritten</h2>
         <p className="mt-2 text-base leading-relaxed text-muted">
-          A cage&apos;s address and an animal&apos;s cage are time-bounded facts, not
-          columns. Every screen here asks the database &ldquo;as of now&rdquo;, which is
-          the same query that answers &ldquo;as of June 3rd&rdquo;. That is why a cage
-          card can show history without any extra machinery.
+          Moves, weights and health checks are recorded with the date they
+          happened, so a cage can tell you who it holds now and who it held in
+          June. Every entry says who made it, and any of them can be undone.
         </p>
       </Card>
     </>
