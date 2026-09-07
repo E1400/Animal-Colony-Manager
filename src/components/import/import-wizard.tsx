@@ -453,8 +453,14 @@ function Grid({
     return hit ?? "";
   };
 
+  // contain:paint on the scroll box matters more than it looks. The box clips
+  // correctly, but its scrollable overflow still counted toward the document's
+  // scroll width — 917px against a 390px phone. iOS reads that as permission to
+  // zoom out until the whole 917px fits, shrinking the interface to about 40%
+  // with no obvious way back. Containment keeps the grid's width the grid's
+  // business.
   return (
-    <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+    <div className="mt-4 overflow-x-auto rounded-xl border border-border [contain:paint]">
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-20 bg-surface-muted">
           <tr>

@@ -15,10 +15,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // No maximum-scale: pinch-zoom must keep working. Blocking it is an
-  // accessibility failure, and this app is used at arm's length.
   width: "device-width",
   initialScale: 1,
+  // Pinching *in* stays available — blocking it fails WCAG 1.4.4, and this app
+  // is read at arm's length. Pinching *out* below 100% is what needed
+  // stopping: the import grid is deliberately wider than a phone, and iOS
+  // treats that as licence to shrink the whole interface to fit it, which
+  // leaves the page unusably small with no obvious way back.
+  minimumScale: 1,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#09090b" },
