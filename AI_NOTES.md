@@ -119,14 +119,12 @@ fails loudly instead of quietly deleting data.
   and confirmed the queue drained to zero and the entry showed up in the cage's
   history.
 
-## Known not verified
-
-- **Camera capture on real iOS Safari.** The scanner is written against ZXing
-  specifically because iOS Safari lacks `BarcodeDetector`, and the manual-entry
-  fallback and page behaviour are tested — but `getUserMedia` needs an HTTPS
-  origin, so the camera path has only run in headless Chromium. Until this is
-  deployed and opened on a physical phone, treat "scanning works on iOS" as
-  unproven. It is the last thing on the mobile milestone for that reason.
+- **Camera capture on real iOS Safari**, which I could not test myself and
+  carried as an explicit unknown until the end. The scanner is written against
+  ZXing specifically because iOS Safari lacks `BarcodeDetector`, but
+  `getUserMedia` needs an HTTPS origin, so it had only run in headless
+  Chromium. Confirmed on a physical iPhone against the deployed URL: scanning
+  a printed cage card opens that cage's record.
 
 **Where I narrowed the offline feature on purpose.** The plan called for an
 offline write queue. The obvious reading is "queue every write", and that is

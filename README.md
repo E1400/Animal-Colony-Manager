@@ -271,14 +271,6 @@ anyone entering data from a different zone. All 53 temporal columns are
 
 Real gaps, separated from things left out on purpose.
 
-**Not verified**
-
-- **Camera scanning on real iOS Safari.** The scanner uses ZXing precisely
-  because Safari does not implement `BarcodeDetector`, and the manual-entry
-  fallback is tested — but `getUserMedia` needs an HTTPS origin and the camera
-  path has only run in headless Chromium. Treat "scanning works on iPhone" as
-  unproven until someone opens the deployed URL on a phone.
-
 **Deliberately out of scope**
 
 - **The offline queue covers only flat, append-only actions** — cage changes

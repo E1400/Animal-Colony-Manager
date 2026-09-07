@@ -19,7 +19,7 @@ export default async function ImportPage() {
     <>
       <PageHeader
         title="Import"
-        subtitle="Bring in a colony spreadsheet. You see exactly what will happen before anything is written."
+        subtitle="Upload a spreadsheet and check every row. Nothing is saved until you say so."
       />
 
       {!allowed ? (
