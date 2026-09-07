@@ -119,6 +119,57 @@ describe("revertChangeset", () => {
     expect(await prisma.husbandryEvent.count({ where: { cageId: cages[0].id } })).toBe(0);
   });
 
+  it("can be undone in turn, putting the original change back", async () => {
+    const { cages, animals, user, lab } = await makeFixture({ animals: 2, cages: 2 });
+
+    await moveAnimalsToCage({
+      animalIds: animals.map((a) => a.id),
+      cageId: cages[0].id,
+      occurredAt: at("2026-06-01T09:00:00Z"),
+      actorId: user.id,
+      labId: lab.id,
+    });
+    const { changesetId } = await moveAnimalsToCage({
+      animalIds: animals.map((a) => a.id),
+      cageId: cages[1].id,
+      occurredAt: at("2026-06-10T09:00:00Z"),
+      actorId: user.id,
+      labId: lab.id,
+    });
+
+    const undone = await revertChangeset({ changesetId, actorId: user.id });
+    for (const animal of animals) {
+      expect((await cageOfAnimal(animal.id))?.id).toBe(cages[0].id);
+    }
+
+    // Undoing the undo restores exactly what it removed. This only works
+    // because the revert recorded the rows it deleted before deleting them.
+    const redone = await revertChangeset({
+      changesetId: undone.revertChangesetId,
+      actorId: user.id,
+    });
+    expect(redone.redo).toBe(true);
+
+    for (const animal of animals) {
+      expect((await cageOfAnimal(animal.id))?.id).toBe(cages[1].id);
+    }
+
+    // The original stands again rather than staying marked as undone.
+    const original = await prisma.changeset.findUniqueOrThrow({
+      where: { id: changesetId },
+    });
+    expect(original.revertedAt).toBeNull();
+    expect(original.revertedByChangesetId).toBeNull();
+
+    // And no duplicate intervals were left behind.
+    for (const animal of animals) {
+      const open = await prisma.animalCagePlacement.count({
+        where: { animalId: animal.id, endedAt: null },
+      });
+      expect(open).toBe(1);
+    }
+  });
+
   it("unwinds in an order the overlap constraint accepts", async () => {
     // Reopening the closed interval before deleting the one stacked on top of
     // it would collide with the exclusion constraint and roll the whole undo

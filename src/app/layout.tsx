@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { SessionBar } from "@/components/session-bar";
+import { THEME_INIT_SCRIPT, ThemeToggle } from "@/components/theme-toggle";
 import { TopNav } from "@/components/top-nav";
 import "./globals.css";
 
@@ -29,7 +30,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        {/* Applies the stored theme before first paint, so the page never
+            flashes the wrong colours on its way to the right ones. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full bg-background text-foreground">
         <a
           href="#main"
@@ -37,7 +44,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <TopNav account={<SessionBar />} />
+        <TopNav
+          account={
+            <>
+              <ThemeToggle />
+              <SessionBar />
+            </>
+          }
+        />
         <main id="main" className="mx-auto w-full max-w-3xl px-4 pb-10 pt-5">
           {children}
         </main>
