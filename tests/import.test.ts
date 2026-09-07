@@ -30,7 +30,7 @@ describe("normalizing what people actually type", () => {
     // mislabels half a colony.
     const result = parseSex("1");
     expect(result.value).toBeNull();
-    expect(result.issues[0].message).toMatch(/ambiguous between labs/i);
+    expect(result.issues[0].message).toMatch(/ambiguous/i);
   });
 
   it("reads ISO, month-name, and month-only dates with the right precision", () => {

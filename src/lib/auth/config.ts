@@ -13,16 +13,29 @@ import type { Role } from "@/generated/prisma/client";
  * session deliberately does not contain one, so a stale or forged token cannot
  * grant access to anything.
  *
- * Sessions are stored in the database rather than in a JWT. Roles change, staff
- * leave, and coverage windows close; a self-contained token would keep working
- * until it expired. A database session can be revoked the moment it should be.
+ * Production stores sessions in the database rather than in a JWT. Roles
+ * change, staff leave, and coverage windows close; a self-contained token would
+ * keep working until it expired, while a database session can be revoked the
+ * moment it should be.
+ *
+ * Development falls back to JWT because Auth.js cannot issue a database session
+ * for the Credentials provider — the seeded shortcut simply produces no session
+ * under the database strategy, and fails silently while appearing to work.
  */
 // Empty strings count as unset: a placeholder pasted into a dashboard is a
 // very common way to end up "configured" with nothing behind it.
 const githubConfigured =
   !!process.env.AUTH_GITHUB_ID?.trim() && !!process.env.AUTH_GITHUB_SECRET?.trim();
 
-const devSignInEnabled = !githubConfigured && process.env.NODE_ENV !== "production";
+/**
+ * Available in development regardless of whether GitHub is configured.
+ *
+ * Once real OAuth credentials sit in .env, requiring a round trip through
+ * GitHub to click a button makes local work and automated browser tests
+ * needlessly painful. Production is the line that matters, and this never
+ * crosses it.
+ */
+const devSignInEnabled = process.env.NODE_ENV !== "production";
 
 /**
  * A local-only sign-in used when no GitHub OAuth App is configured.
@@ -55,7 +68,7 @@ const devProviders = !devSignInEnabled
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  session: { strategy: githubConfigured ? "database" : "jwt" },
+  session: { strategy: devSignInEnabled ? "jwt" : "database" },
   pages: { signIn: "/signin" },
   providers: [
     ...(githubConfigured

@@ -74,7 +74,7 @@ export function parseSex(raw: unknown, field = "sex"): Field<Sex> {
         field,
         raw: String(raw),
         message:
-          "Numeric sex coding is ambiguous between labs (1 = male in some, female in others). Map this column explicitly or fix the sheet.",
+          "Numeric sex coding is ambiguous — 1 means male in some labs, female in others.",
       },
     ]);
   }
