@@ -70,6 +70,21 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/*
+ * iOS Safari zooms the page whenever a focused field's text is below 16px,
+ * and does not zoom back out afterwards. The import grid uses small type on
+ * purpose — it is a spreadsheet — so the fields are forced back to 16px on
+ * phones, where the density matters less than not having the viewport lurch
+ * every time someone corrects a cell.
+ */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Visible focus for keyboard users, on every interactive element. */
 :focus-visible {
   outline: 2px solid var(--accent);
