@@ -16,11 +16,18 @@ import { defineConfig } from "prisma/config";
  * The app runtime keeps using the pooled URL — see src/lib/db.ts — because that
  * is the right connection for serverless request handling.
  */
-const migrationUrl =
-  process.env.DIRECT_DATABASE_URL ??
-  process.env.DATABASE_URL_UNPOOLED ??
-  process.env.POSTGRES_URL_NON_POOLING ??
-  process.env.DATABASE_URL;
+// An empty string is unset, not a value. `.env.example` ships these blank,
+// and `??` would let an empty DIRECT_DATABASE_URL shadow a perfectly good
+// DATABASE_URL — which it did, breaking migrations on a fresh clone.
+const firstSet = (...values: Array<string | undefined>) =>
+  values.find((v) => v?.trim());
+
+const migrationUrl = firstSet(
+  process.env.DIRECT_DATABASE_URL,
+  process.env.DATABASE_URL_UNPOOLED,
+  process.env.POSTGRES_URL_NON_POOLING,
+  process.env.DATABASE_URL,
+);
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

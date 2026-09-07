@@ -148,6 +148,40 @@ no business sitting between mount and first paint. Reading `localStorage` for
 the pending count also moved to `useSyncExternalStore`, which is what stops the
 server and first client render from disagreeing about queue length.
 
+**Two bugs that only a cold clone could find.** After everything was built,
+tested and deployed, I cloned the repo from GitHub into an empty directory and
+followed my own README. It failed on the second command. `.env.example` ships
+`DIRECT_DATABASE_URL=""`, and the migration config used `??` — an empty string
+is not nullish, so a blank variable shadowed a perfectly good `DATABASE_URL`
+and `prisma migrate deploy` died with "Connection url is empty". Every test
+passed, CI was green, production was live, and the documented setup path was
+broken for anyone who followed it exactly. The lesson is narrow and worth
+holding: a working machine tells you nothing about a fresh one, and `??`
+treats `""` as a value while almost every environment-variable convention
+treats it as absence.
+
+**The backup verification caught the backup.** The restore compares row counts
+against the snapshot afterwards and fails on a mismatch. The first real run
+reported `user: expected 6, got 7` — because I had decided whether the target
+was empty by counting the `labs` table alone, so leftover rows in other tables
+survived the wipe. Without that check the restore would have quietly produced
+a subtly wrong colony and reported success. This is the thing the brief is
+pointed about, and it justified itself on first contact.
+
+## What the accessibility pass actually found
+
+Running axe-core across all nine pages beat reading the markup. Three real
+violations, none of which I would have spotted by eye:
+
+- Search inputs used `flex-1` without `min-w-0`. Flex items default to
+  `min-width: auto`, so they could not shrink below their placeholder text —
+  at 200% zoom that pushed 289px of horizontal overflow onto every page with a
+  search box. A straight WCAG 1.4.4 failure that looks perfect at 100%.
+- The cage-card QR carried `aria-label` on a bare `<div>`, where ARIA
+  attributes are prohibited without a role.
+- The amber "undone" badge missed 4.5:1 against its own tinted background —
+  by about 0.06.
+
 ## Vendored agent skills
 
 `prisma init` silently installed nine Prisma-authored skill packs into
