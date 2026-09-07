@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
 
 import { prisma } from "@/lib/db";
+import type { Role } from "@/generated/prisma/client";
 
 /**
  * Authentication: proving who someone is. Authorization — what they may do —
@@ -68,6 +69,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
     ...devProviders,
   ],
+  events: {
+    /**
+     * Demo affordance, off unless DEMO_AUTO_MEMBERSHIP names a role.
+     *
+     * Without it, a brand-new GitHub identity has no membership anywhere, so
+     * signing in leaves you exactly as powerless as being signed out — correct
+     * for a real vivarium, useless for someone evaluating the app. When the
+     * variable is set, a user with no membership at all is given that role in
+     * the demo lab.
+     *
+     * Deliberately opt-in and deliberately not a privileged role: it lets a
+     * visitor exercise the permission system, including being refused things,
+     * without handing a stranger the ability to delete a colony. It never
+     * touches a user who already has a membership, so it cannot quietly
+     * escalate anyone.
+     */
+    async signIn({ user }) {
+      const role = process.env.DEMO_AUTO_MEMBERSHIP?.trim();
+      if (!role || !user.id) return;
+
+      const existing = await prisma.membership.count({ where: { userId: user.id } });
+      if (existing > 0) return;
+
+      const lab = await prisma.lab.findFirst({ orderBy: { createdAt: "asc" } });
+      if (!lab) return;
+
+      await prisma.membership.create({
+        data: { userId: user.id, labId: lab.id, role: role as Role },
+      });
+    },
+  },
   callbacks: {
     async session({ session, user, token }) {
       // Surface the database user id, which is what every authorization lookup
