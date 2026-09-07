@@ -64,6 +64,28 @@ export function ImportWizard({ samples }: { samples: Array<{ name: string; descr
     });
   }
 
+  /**
+   * Fix a value without leaving the page.
+   *
+   * The parsed sheet lives in client state, so a corrected cell rewrites it and
+   * re-runs the same checks. Making someone open Excel, fix one typo and
+   * re-upload is how a review step turns into a chore people route around.
+   */
+  function editCell(rowNumber: number, header: string, value: string) {
+    if (!analysis) return;
+    const index = analysis.sheet.rowNumbers.indexOf(rowNumber);
+    if (index < 0) return;
+
+    const rows = analysis.sheet.rows.map((row, i) =>
+      i === index ? { ...row, [header]: value } : row,
+    );
+    const sheet = { ...analysis.sheet, rows };
+
+    startTransition(async () => {
+      apply(await replan(sheet, analysis.mapping, dateOrder || undefined), analysis.filename);
+    });
+  }
+
   function changeDateOrder(order: DateOrder | "") {
     setDateOrder(order);
     if (!analysis) return;
@@ -128,12 +150,15 @@ export function ImportWizard({ samples }: { samples: Array<{ name: string; descr
         </p>
       ) : null}
 
+      <Explainer />
+
       <Grid
         sheet={analysis.sheet}
         mapping={analysis.mapping}
         rows={visible}
         mappedHeaders={mappedHeaders}
         onRemap={remap}
+        onEdit={editCell}
         busy={busy}
       />
 
@@ -355,6 +380,51 @@ function SummaryBar({
 }
 
 /**
+ * Says what the screen is asking of you, before you have to work it out.
+ *
+ * Two things were opaque without it: why the headers carry dropdowns at all,
+ * and what the coloured labels on each row mean.
+ */
+function Explainer() {
+  const legend: Array<[keyof typeof STATUS_STYLE, string]> = [
+    ["CREATED", "a new animal will be added"],
+    ["UPDATED", "this tag already exists, so that animal will be updated"],
+    ["FLAGGED", "it will import, but something was guessed — worth a look"],
+    ["ERROR", "it will not import; fix the cell or leave the row out"],
+  ];
+
+  return (
+    <details className="mt-4 rounded-xl border border-border bg-surface px-4 py-3" open>
+      <summary className="cursor-pointer text-sm font-semibold">
+        How to read this
+      </summary>
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        Your spreadsheet does not have to match any particular format. The
+        dropdown under each column header says which field that column fills —
+        change it if the guess is wrong, and every row is re-checked
+        immediately. Set a column to <em>not imported</em> to ignore it.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        Any cell can be edited here. Click it, correct it, and the row
+        re-checks when you move on — no need to fix the file and upload again.
+      </p>
+      <ul className="mt-3 grid gap-1.5">
+        {legend.map(([status, meaning]) => (
+          <li key={status} className="flex items-center gap-2 text-sm text-muted">
+            <span
+              className={`w-16 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold ${STATUS_STYLE[status].chip}`}
+            >
+              {STATUS_STYLE[status].label}
+            </span>
+            {meaning}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
  * The sheet, shown as a sheet.
  *
  * Column headers double as the mapping control, so correcting a mis-guessed
@@ -367,6 +437,7 @@ function Grid({
   rows,
   mappedHeaders,
   onRemap,
+  onEdit,
   busy,
 }: {
   sheet: Sheet;
@@ -374,6 +445,7 @@ function Grid({
   rows: SerializableRow[];
   mappedHeaders: Set<string | undefined>;
   onRemap: (field: ImportField, header: string) => void;
+  onEdit: (rowNumber: number, header: string, value: string) => void;
   busy: boolean;
 }) {
   const fieldFor = (header: string): ImportField | "" => {
@@ -442,10 +514,27 @@ function Grid({
                   {sheet.headers.map((header) => (
                     <td
                       key={header}
-                      className="max-w-64 truncate border-b border-l border-border px-2 py-1.5 font-mono text-xs"
-                      title={row.raw[header]}
+                      className="border-b border-l border-border p-0"
                     >
-                      {row.raw[header] || <span className="text-muted">—</span>}
+                      <label className="sr-only" htmlFor={`c-${row.rowNumber}-${header}`}>
+                        {header}, row {row.rowNumber}
+                      </label>
+                      <input
+                        id={`c-${row.rowNumber}-${header}`}
+                        defaultValue={row.raw[header] ?? ""}
+                        disabled={busy}
+                        // Re-checking on every keystroke would fight the typist.
+                        // Blur is when the value is settled.
+                        onBlur={(e) => {
+                          if (e.target.value !== (row.raw[header] ?? "")) {
+                            onEdit(row.rowNumber, header, e.target.value);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                        className="w-full min-w-40 bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:bg-accent/10 focus:ring-1 focus:ring-inset focus:ring-accent"
+                      />
                     </td>
                   ))}
                 </tr>

@@ -236,15 +236,16 @@ async function replay(
     restored += rows.length;
   }
 
-  // The original stands again, and the revert is spent.
+  // The original stands again, and the revert is deleted rather than kept and
+  // marked spent. Keeping it left a changeset that had already been reverted
+  // lying around, so pressing undo again landed on it and failed with "that
+  // change has already been undone". Removing it returns the log to exactly
+  // the state before the undo — the original entry, and nothing else.
   await tx.changeset.update({
     where: { id: payload.originalChangesetId },
     data: { revertedAt: null, revertedByChangesetId: null },
   });
-  await tx.changeset.update({
-    where: { id: opts.changesetId },
-    data: { revertedAt: new Date(), restorePayload: undefined },
-  });
+  await tx.changeset.delete({ where: { id: opts.changesetId } });
 
   return {
     revertChangesetId: opts.changesetId,
@@ -298,17 +299,42 @@ export async function recentChangesets(opts: { labId?: string; limit?: number } 
       // plenty: a changeset that touched forty cages still only needs a
       // sensible place to land.
       events: {
-        select: { animalId: true, cage: { select: { code: true } } },
-        take: 1,
+        select: {
+          cage: { select: { code: true } },
+          animal: {
+            select: {
+              id: true,
+              identifiers: {
+                where: { isPrimary: true, retiredAt: null },
+                select: { value: true },
+                take: 1,
+              },
+            },
+          },
+        },
+        take: 6,
       },
       animalPlacementsStarted: {
-        select: { animalId: true, cage: { select: { code: true } } },
-        take: 1,
+        select: {
+          cage: { select: { code: true } },
+          animal: {
+            select: {
+              id: true,
+              identifiers: {
+                where: { isPrimary: true, retiredAt: null },
+                select: { value: true },
+                take: 1,
+              },
+            },
+          },
+        },
+        take: 6,
       },
       cagePlacementsStarted: {
         select: { cage: { select: { code: true } } },
-        take: 1,
+        take: 6,
       },
+      importBatch: { select: { id: true, filename: true } },
       _count: {
         select: {
           animalPlacementsStarted: true,
@@ -320,18 +346,50 @@ export async function recentChangesets(opts: { labId?: string; limit?: number } 
   });
 }
 
-/** Where a row in the activity log should take you when clicked. */
-export function changesetTarget(cs: {
-  events: Array<{ animalId: string | null; cage: { code: string } | null }>;
-  animalPlacementsStarted: Array<{ animalId: string; cage: { code: string } }>;
+type WithSubjects = {
+  events: Array<{
+    cage: { code: string } | null;
+    animal: { id: string; identifiers: Array<{ value: string }> } | null;
+  }>;
+  animalPlacementsStarted: Array<{
+    cage: { code: string };
+    animal: { id: string; identifiers: Array<{ value: string }> };
+  }>;
   cagePlacementsStarted: Array<{ cage: { code: string } }>;
-}): string | null {
-  const cage =
-    cs.events[0]?.cage?.code ??
-    cs.animalPlacementsStarted[0]?.cage.code ??
-    cs.cagePlacementsStarted[0]?.cage.code;
-  if (cage) return `/cages/${encodeURIComponent(cage)}`;
+};
 
-  const animal = cs.events[0]?.animalId ?? cs.animalPlacementsStarted[0]?.animalId;
-  return animal ? `/animals/${animal}` : null;
+/**
+ * Everything a changeset touched, as links.
+ *
+ * A row that says "health check logged" is only useful if you can get from it
+ * to the cage and the animal it was about. Cages are labelled by code and
+ * animals by their primary ear tag, since that is what is written on them.
+ */
+export function changesetLinks(cs: WithSubjects): Array<{ label: string; href: string }> {
+  const links = new Map<string, { label: string; href: string }>();
+
+  const addCage = (code?: string) => {
+    if (code) links.set(`c:${code}`, { label: code, href: `/cages/${encodeURIComponent(code)}` });
+  };
+  const addAnimal = (a?: { id: string; identifiers: Array<{ value: string }> } | null) => {
+    if (!a) return;
+    links.set(`a:${a.id}`, {
+      label: a.identifiers[0]?.value ?? "animal",
+      href: `/animals/${a.id}`,
+    });
+  };
+
+  for (const e of cs.events) {
+    addCage(e.cage?.code);
+    addAnimal(e.animal);
+  }
+  for (const p of cs.animalPlacementsStarted) {
+    addCage(p.cage.code);
+    addAnimal(p.animal);
+  }
+  for (const p of cs.cagePlacementsStarted) addCage(p.cage.code);
+
+  // A bulk import touches hundreds of records; listing them all would bury the
+  // row. Show a handful and let the count speak for the rest.
+  return [...links.values()].slice(0, 6);
 }

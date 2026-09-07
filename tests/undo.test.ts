@@ -168,6 +168,41 @@ describe("revertChangeset", () => {
       });
       expect(open).toBe(1);
     }
+
+    // The revert is gone, not merely marked spent. Leaving it behind meant a
+    // second undo landed on an already-reverted changeset and failed.
+    const revert = await prisma.changeset.findUnique({
+      where: { id: undone.revertChangesetId },
+    });
+    expect(revert).toBeNull();
+  });
+
+  it("survives undo and redo being pressed repeatedly", async () => {
+    const { cages, animals, user, lab } = await makeFixture({ animals: 1, cages: 1 });
+    const { changesetId } = await moveAnimalsToCage({
+      animalIds: [animals[0].id],
+      cageId: cages[0].id,
+      occurredAt: at("2026-06-01T09:00:00Z"),
+      actorId: user.id,
+      labId: lab.id,
+    });
+
+    for (let round = 0; round < 3; round++) {
+      const undone = await revertChangeset({ changesetId, actorId: user.id });
+      expect(await cageOfAnimal(animals[0].id)).toBeNull();
+
+      const redone = await revertChangeset({
+        changesetId: undone.revertChangesetId,
+        actorId: user.id,
+      });
+      expect(redone.redo).toBe(true);
+      expect((await cageOfAnimal(animals[0].id))?.id).toBe(cages[0].id);
+    }
+
+    // Back to exactly one entry in the log, as if none of it had happened.
+    const changesets = await prisma.changeset.findMany({ where: { labId: lab.id } });
+    expect(changesets).toHaveLength(1);
+    expect(changesets[0].revertedAt).toBeNull();
   });
 
   it("unwinds in an order the overlap constraint accepts", async () => {
