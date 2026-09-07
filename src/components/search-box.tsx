@@ -43,7 +43,7 @@ export function SearchBox({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Cage, slot, or ear tag"
-        className="min-h-14 flex-1 rounded-xl border border-border bg-surface px-4 text-lg placeholder:text-muted"
+        className="min-h-14 min-w-0 flex-1 rounded-xl border border-border bg-surface px-4 text-lg placeholder:text-muted"
       />
       <button
         type="submit"
