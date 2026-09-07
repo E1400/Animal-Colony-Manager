@@ -9,8 +9,22 @@
   any code was written — see `claude/task2-plan.md` there for the full
   architecture reasoning; this file only covers moments during the build
   itself.
-- _TODO: note any subagents/commands/MCP servers actually used as the build
-  progresses._
+- **No subagents and no MCP servers.** Several MCP connectors were available
+  (Google Drive, Gmail, Calendar) and none were relevant; the work stayed in
+  one session against this repo. Two Anthropic-authored skills were loaded:
+  `webapp-testing`, which is where the Playwright approach came from, and
+  `prisma-cli` reference material during the Prisma 7 setup.
+- **Command-line tools it drove directly:** the Prisma CLI for migrations,
+  seeding and the local Postgres servers; `gh` for pushes, CI status and
+  reading Vercel's deployment results; the Vercel CLI for linking the project
+  and setting production environment variables; Playwright and axe-core for the
+  browser and accessibility checks; and OpenCV once, to decode the cage-card QR
+  out of a screenshot.
+- **What it could not do**, and where I had to act: creating the Vercel and Neon
+  accounts, registering the GitHub OAuth app, and testing the camera on a real
+  iPhone. It was blocked from `vercel login` (an interactive prompt it could
+  not answer) and initially from deleting files, and said so rather than
+  working around either.
 
 ## Moments where we disagreed, or it got something wrong
 
