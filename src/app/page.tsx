@@ -51,9 +51,9 @@ export default async function Home() {
       <Card className="mt-5">
         <h2 className="text-base font-semibold">Nothing here is overwritten</h2>
         <p className="mt-2 text-base leading-relaxed text-muted">
-          Moves, weights and health checks are recorded with the date they
-          happened, so a cage can tell you who it holds now and who it held in
-          June. Every entry says who made it, and any of them can be undone.
+          Every record keeps the date it happened, the person who entered it,
+          and a way to undo it. So a cage shows its history, not just who is in
+          it today.
         </p>
       </Card>
     </>

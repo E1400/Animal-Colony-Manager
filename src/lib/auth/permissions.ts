@@ -75,12 +75,16 @@ const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
     "import:run",
     "changeset:undo",
   ],
+  // Bulk import is the same authority as creating animals and cages one at a
+  // time, which a technician already has. Withholding it only pushes the work
+  // back into the spreadsheet this app is meant to replace.
   TECHNICIAN: [
     "colony:read",
     "event:log",
     "event:correct",
     "animal:write",
     "cage:write",
+    "import:run",
     "changeset:undo",
   ],
   // The person most likely to be at a rack at 11pm, and most likely to be

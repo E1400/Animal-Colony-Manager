@@ -116,14 +116,27 @@ async function removeCreatedRows(tx: Tx, changesetId: string): Promise<number> {
   );
 }
 
-/** Recent changesets for the audit trail, newest first. */
+/**
+ * Recent changesets for the audit trail, newest first.
+ *
+ * Revert changesets are excluded. Undoing something otherwise produces two
+ * entries — the original marked undone, and a second saying it was undone —
+ * which reads as duplication rather than history. One human action is one row;
+ * the fact it was undone, and by whom, is shown on the row it happened to.
+ */
 export async function recentChangesets(opts: { labId?: string; limit?: number } = {}) {
   return prisma.changeset.findMany({
-    where: opts.labId ? { labId: opts.labId } : {},
+    where: {
+      ...(opts.labId ? { labId: opts.labId } : {}),
+      kind: { not: "REVERT" },
+    },
     orderBy: { createdAt: "desc" },
     take: opts.limit ?? 50,
     include: {
       actor: { select: { id: true, name: true } },
+      revertedBy: {
+        select: { createdAt: true, actor: { select: { name: true } } },
+      },
       _count: {
         select: {
           animalPlacementsStarted: true,

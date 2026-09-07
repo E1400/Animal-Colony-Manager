@@ -8,10 +8,13 @@ import { undoChangeset } from "@/app/activity/actions";
 /**
  * The undo a tired person can find.
  *
- * Two taps, not one: undo is itself a write that other people will see, so it
- * asks once. But the confirmation says exactly what will be undone rather than
- * "Are you sure?", because the thing that makes people hesitate is not knowing
- * what the button will do.
+ * Two taps, not one: undo is itself a write other people will see, so it asks
+ * once. The confirmation names the change rather than saying "Are you sure?",
+ * because what makes people hesitate is not knowing what the button will do.
+ *
+ * It occupies its own full-width row rather than sitting in the card's
+ * right-hand controls. The confirmation is a sentence, and a sentence inside a
+ * `shrink-0` column overflows and lands on top of the summary text beside it.
  */
 export function UndoButton({
   changesetId,
@@ -28,37 +31,40 @@ export function UndoButton({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  if (disabledReason) {
-    return (
-      <span className="text-sm text-muted" title={disabledReason}>
-        {disabledReason}
-      </span>
-    );
+  if (result) {
+    return <p className="mt-2 text-sm text-accent">{result}</p>;
   }
 
-  if (result) {
-    return <span className="text-sm text-accent">{result}</span>;
+  if (disabledReason) {
+    return <p className="mt-2 text-sm text-muted">{disabledReason}</p>;
   }
 
   if (!confirming) {
     return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="min-h-11 shrink-0 rounded-xl border border-border px-4 text-sm font-semibold hover:border-accent"
-      >
-        Undo
-      </button>
+      <div className="mt-2 flex justify-end">
+        {error ? (
+          <p role="alert" className="mr-auto self-center text-sm text-warn">
+            {error}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold hover:border-accent"
+        >
+          Undo
+        </button>
+      </div>
     );
   }
 
   return (
-    <div className="w-full">
+    <div className="mt-3 border-t border-border pt-3">
       <p className="text-sm text-muted">
         Undo <span className="font-medium text-foreground">{summary}</span>? This is
         recorded in the log and can be seen by the rest of the lab.
       </p>
-      <div className="mt-2 flex gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
           disabled={isPending}
@@ -88,11 +94,6 @@ export function UndoButton({
           Keep it
         </button>
       </div>
-      {error ? (
-        <p role="alert" className="mt-2 text-sm text-warn">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

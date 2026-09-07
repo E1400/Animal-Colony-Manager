@@ -73,7 +73,7 @@ export default async function ActivityPage() {
                 key={cs.id}
                 className="rounded-xl border border-border bg-surface px-4 py-3"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{cs.summary}</p>
                     <p className="mt-1 text-sm text-muted">
@@ -84,24 +84,23 @@ export default async function ActivityPage() {
                       <p className="mt-1 text-sm text-muted">“{cs.reason}”</p>
                     ) : null}
                   </div>
-
-                  <div className="flex shrink-0 items-center gap-2">
-                    {cs.kind !== "MANUAL" ? (
-                      <Badge tone={cs.kind === "REVERT" ? "warn" : "neutral"}>
-                        {humanize(cs.kind)}
-                      </Badge>
-                    ) : null}
-                    {cs.revertedAt ? (
-                      <Badge tone="warn">undone</Badge>
-                    ) : (
-                      <UndoButton
-                        changesetId={cs.id}
-                        summary={cs.summary}
-                        disabledReason={verdict.allowed ? undefined : verdict.reason}
-                      />
-                    )}
-                  </div>
+                  {cs.kind !== "MANUAL" ? <Badge>{humanize(cs.kind)}</Badge> : null}
                 </div>
+
+                {cs.revertedAt ? (
+                  // Already undone: say so here, and by whom. The revert has no
+                  // row of its own — one human action is one entry.
+                  <p className="mt-2 text-sm text-warn">
+                    Undone by {cs.revertedBy?.actor?.name ?? "someone"}
+                    {cs.revertedBy?.createdAt ? ` · ${when(cs.revertedBy.createdAt)}` : ""}
+                  </p>
+                ) : (
+                  <UndoButton
+                    changesetId={cs.id}
+                    summary={cs.summary}
+                    disabledReason={verdict.allowed ? undefined : verdict.reason}
+                  />
+                )}
               </li>
             );
           })}
