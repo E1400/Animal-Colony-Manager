@@ -46,7 +46,16 @@ export default async function SignInPage() {
             Continue with GitHub
           </button>
         </form>
-      ) : !isDevSignInEnabled ? (
+      ) : null}
+
+      {isGithubConfigured && isDevSignInEnabled ? (
+        <p className="mt-4 text-sm text-muted">
+          Development build — the seeded shortcut below is also available, and is
+          not registered in production.
+        </p>
+      ) : null}
+
+      {!isGithubConfigured && !isDevSignInEnabled ? (
         <Card>
           <h2 className="text-base font-semibold">Sign-in is not configured</h2>
           <p className="mt-2 text-base leading-relaxed text-muted">
@@ -57,8 +66,10 @@ export default async function SignInPage() {
             sign-in. Everything remains readable without it.
           </p>
         </Card>
-      ) : (
-        <Card>
+      ) : null}
+
+      {isDevSignInEnabled ? (
+        <Card className="mt-4">
           <h2 className="text-base font-semibold">Local sign-in</h2>
           <p className="mt-2 text-base leading-relaxed text-muted">
             No GitHub OAuth app is configured, so this deployment falls back to
@@ -102,7 +113,7 @@ export default async function SignInPage() {
             </ul>
           )}
         </Card>
-      )}
+      ) : null}
     </>
   );
 }

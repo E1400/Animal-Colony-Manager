@@ -1,0 +1,14 @@
+Kaplan Lab - Colony Census,,,,,
+Updated June 2024 -- ask Dev before editing,,,,,
+,,,,,
+Ear Tag,Sex,DOB,Cage,Strain,Notes
+2101,M,2024-03-15,CG-2001,C57BL/6J,
+2102,male,03/16/2024,CG-2001,C57BL/6J,het for Ai9 - confirmed
+2103,♀,Mar 17 2024,cg-2002,C57BL/6J,lowercase cage code
+,,,,,
+2104,F,45367,CG-2002,C57BL/6J,date came out of Excel as a number
+ 2105 ,f,June 2024,CG-2003,B6,only the month is known
+#2106,doe,17/03/2024,CG-2003,B6,day-first date; only one valid reading
+2107,X,2024-03-20,CG-2003,B6,unrecognised sex code
+2108,M,2024-13-45,CG-2004,B6,not a real date
+2101,M,2024-03-15,CG-2001,C57BL/6J,same tag as row 5

@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/cages", label: "Cages" },
   { href: "/scan", label: "Scan" },
   { href: "/search", label: "Search" },
+  { href: "/import", label: "Import" },
   { href: "/activity", label: "Activity" },
 ] as const;
 

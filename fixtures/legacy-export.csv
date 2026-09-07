@@ -1,0 +1,6 @@
+mouse id,gender,date of birth,cage no,line,genotype,comments
+M-501,1,04/03/2024,B-12,Ai9,het,numeric sex coding - genuinely ambiguous between labs
+M-502,F,04/03/2024,B-12,Ai9,wt,could be 4 March or 3 April
+M-503,F,,B-12,Ai9,,no date of birth at all
+M-504,M,2024-04-05,,Ai9,hom,no cage listed
+M-505,M,2024-04-05,B-99,Ai9,,cage that does not exist yet
