@@ -20,11 +20,15 @@ export function UndoButton({
   changesetId,
   summary,
   disabledReason,
+  mode = "undo",
 }: {
   changesetId: string;
   summary: string;
   disabledReason?: string;
+  /** "redo" undoes a previous undo, putting the original change back. */
+  mode?: "undo" | "redo";
 }) {
+  const verb = mode === "redo" ? "Redo" : "Undo";
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -52,7 +56,7 @@ export function UndoButton({
           onClick={() => setConfirming(true)}
           className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold hover:border-accent"
         >
-          Undo
+          {verb}
         </button>
       </div>
     );
@@ -61,7 +65,8 @@ export function UndoButton({
   return (
     <div className="mt-3 border-t border-border pt-3">
       <p className="text-sm text-muted">
-        Undo <span className="font-medium text-foreground">{summary}</span>? This is
+        {mode === "redo" ? "Put back" : "Undo"}{" "}
+        <span className="font-medium text-foreground">{summary}</span>? This is
         recorded in the log and can be seen by the rest of the lab.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -83,7 +88,7 @@ export function UndoButton({
           }}
           className="min-h-11 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-contrast disabled:opacity-60"
         >
-          {isPending ? "Undoing…" : "Yes, undo it"}
+          {isPending ? "Working…" : mode === "redo" ? "Yes, put it back" : "Yes, undo it"}
         </button>
         <button
           type="button"
@@ -91,7 +96,7 @@ export function UndoButton({
           onClick={() => setConfirming(false)}
           className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold"
         >
-          Keep it
+          {mode === "redo" ? "Leave it undone" : "Keep it"}
         </button>
       </div>
     </div>

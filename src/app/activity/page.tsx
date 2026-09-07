@@ -1,7 +1,9 @@
 import { getCurrentActor } from "@/lib/actor";
 import { resolveGrant } from "@/lib/auth/grants";
-import { canUndoChangeset } from "@/lib/auth/permissions";
-import { recentChangesets } from "@/lib/operations/undo";
+import { can, canUndoChangeset } from "@/lib/auth/permissions";
+import { changesetTarget, recentChangesets } from "@/lib/operations/undo";
+import Link from "next/link";
+
 import { Badge, EmptyState, PageHeader, humanize } from "@/components/ui";
 import { UndoButton } from "@/components/undo-button";
 
@@ -63,6 +65,8 @@ export default async function ActivityPage() {
                 ? canUndoChangeset(grant, cs, actor.id)
                 : { allowed: false, reason: "Sign in to undo." };
 
+            const href = changesetTarget(cs);
+
             const touched =
               cs._count.animalPlacementsStarted +
               cs._count.cagePlacementsStarted +
@@ -75,7 +79,19 @@ export default async function ActivityPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium">{cs.summary}</p>
+                    {href ? (
+                      // The title is the link rather than the whole card: the
+                      // card also holds a button, and nesting one interactive
+                      // element inside another breaks keyboard navigation.
+                      <Link
+                        href={href}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {cs.summary}
+                      </Link>
+                    ) : (
+                      <p className="font-medium">{cs.summary}</p>
+                    )}
                     <p className="mt-1 text-sm text-muted">
                       {cs.actor?.name ?? "system"} · {when(cs.createdAt)}
                       {touched > 0 ? ` · ${touched} record${touched === 1 ? "" : "s"}` : ""}
@@ -89,11 +105,26 @@ export default async function ActivityPage() {
 
                 {cs.revertedAt ? (
                   // Already undone: say so here, and by whom. The revert has no
-                  // row of its own — one human action is one entry.
-                  <p className="mt-2 text-sm text-warn">
-                    Undone by {cs.revertedBy?.actor?.name ?? "someone"}
-                    {cs.revertedBy?.createdAt ? ` · ${when(cs.revertedBy.createdAt)}` : ""}
-                  </p>
+                  // row of its own — one human action is one entry — so the way
+                  // back is offered from this row too.
+                  <>
+                    <p className="mt-2 text-sm text-warn">
+                      Undone by {cs.revertedBy?.actor?.name ?? "someone"}
+                      {cs.revertedBy?.createdAt
+                        ? ` · ${when(cs.revertedBy.createdAt)}`
+                        : ""}
+                    </p>
+                    {cs.revertedBy?.id && grant && actor ? (
+                      <UndoButton
+                        mode="redo"
+                        changesetId={cs.revertedBy.id}
+                        summary={cs.summary}
+                        disabledReason={
+                          can(grant, "changeset:undo") ? undefined : "Your role cannot undo changes."
+                        }
+                      />
+                    ) : null}
+                  </>
                 ) : (
                   <UndoButton
                     changesetId={cs.id}

@@ -776,6 +776,14 @@ model Changeset {
   revertedAt            DateTime? @map("reverted_at") @db.Timestamptz(3)
   revertedByChangesetId String?   @unique @map("reverted_by_changeset_id") @db.Uuid
 
+  /// What a revert removed, so the revert can itself be undone.
+  ///
+  /// Undo is destructive — it deletes the rows a changeset created and reopens
+  /// the intervals it closed. Without recording those rows first there is
+  /// nothing to put back, and "undo the undo" is impossible. Only revert
+  /// changesets carry this.
+  restorePayload Json? @map("restore_payload")
+
   lab   Lab?  @relation(fields: [labId], references: [id])
   actor User? @relation(fields: [actorId], references: [id])
 

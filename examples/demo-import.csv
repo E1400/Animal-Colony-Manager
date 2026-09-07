@@ -1,0 +1,14 @@
+Kaplan Lab - new arrivals,,,,,
+Week of Sep 7 2026 - check tags against the cards,,,,,
+,,,,,
+Ear Tag,Sex,DOB,Cage,Strain,Notes
+9001,M,2026-06-02,CG-3001,C57BL/6J,
+9002,male,06/04/2026,CG-3001,C57BL/6J,het for Ai9 per Transnetyx
+9003,♀,Jun 6 2026,cg-3001,C57BL/6J,lowercase cage code on the sheet
+,,,,,
+9004,F,46180,CG-3002,Ai9,Excel turned this date into a number
+ 9005 ,f,June 2026,CG-3002,Ai9,only the month was written down
+#9006,doe,17/06/2026,CG-3002,Ai9,day-first date - only one valid reading
+9007,X,2026-06-20,CG-3003,Ai9,unrecognised sex code
+9008,M,2026-13-45,CG-3003,Ai9,not a real date
+9001,M,2026-06-02,CG-3001,C57BL/6J,same tag as the first row

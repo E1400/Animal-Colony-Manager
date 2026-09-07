@@ -19,7 +19,7 @@ export default async function ImportPage() {
     <>
       <PageHeader
         title="Import"
-        subtitle="Upload a spreadsheet and check every row. Nothing is saved until you say so."
+        subtitle="Upload a spreadsheet and check every row before importing."
       />
 
       {!allowed ? (

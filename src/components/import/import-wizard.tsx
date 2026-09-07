@@ -245,9 +245,10 @@ function Upload({
       ) : null}
 
       <section className="mt-8">
-        <h2 className="text-base font-semibold">Or try one of the awkward ones</h2>
+        <h2 className="text-base font-semibold">No file handy? Try a sample</h2>
         <p className="mt-1 text-sm text-muted">
-          These are the fixtures the importer is tested against.
+          Each of these is deliberately messy in a different way, so you can see
+          what the checks catch.
         </p>
         <ul className="mt-3 grid gap-2">
           {samples.map((s) => (

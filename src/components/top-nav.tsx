@@ -57,7 +57,7 @@ export function TopNav({ account }: { account?: ReactNode }) {
             );
           })}
         </ul>
-        {account ? <div className="shrink-0">{account}</div> : null}
+        {account ? <div className="flex shrink-0 items-center">{account}</div> : null}
       </div>
     </nav>
   );

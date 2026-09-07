@@ -18,8 +18,13 @@
   --warn: #8a3d05;
 }
 
+/*
+ * Three states, not two: an explicit light choice, an explicit dark choice,
+ * and no choice at all — which follows the device. The system rule is guarded
+ * so that picking light on a dark phone actually wins.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #09090b;
     --surface: #18181b;
     --surface-muted: #27272a;
@@ -30,6 +35,18 @@
     --accent-contrast: #042f2e;
     --warn: #fbbf24;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #09090b;
+  --surface: #18181b;
+  --surface-muted: #27272a;
+  --border: #3f3f46;
+  --foreground: #fafafa;
+  --muted: #a1a1aa;
+  --accent: #2dd4bf;
+  --accent-contrast: #042f2e;
+  --warn: #fbbf24;
 }
 
 @theme inline {

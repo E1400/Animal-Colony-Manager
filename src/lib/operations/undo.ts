@@ -1,12 +1,46 @@
 import { prisma } from "@/lib/db";
 import type { Tx } from "@/lib/changeset";
 
+/**
+ * Everything a revert took away, kept so the revert can be undone in turn.
+ *
+ * `deleted` is whole rows, keyed by table and re-inserted in dependency order.
+ * `reopened` is only the closing half of an interval, because reverting a move
+ * reopens a placement rather than deleting it.
+ */
+export type RestorePayload = {
+  originalChangesetId: string;
+  deleted: Record<string, unknown[]>;
+  reopened: Array<{
+    table: "animalCagePlacement" | "cagePlacement";
+    id: string;
+    endedAt: string;
+    endedById: string | null;
+    endRecordedAt: string | null;
+    endChangesetId: string | null;
+  }>;
+};
+
+/** Re-insert order mirrors the foreign keys, same as the backup script. */
+const RESTORE_ORDER = [
+  "animalIdentifier",
+  "genotype",
+  "breedingPair",
+  "litter",
+  "coverageAssignment",
+  "cagePlacement",
+  "animalCagePlacement",
+  "husbandryEvent",
+] as const;
+
 export type UndoSummary = {
   revertChangesetId: string;
   placementsRemoved: number;
   placementsReopened: number;
   eventsRemoved: number;
   otherRowsRemoved: number;
+  /** True when this call put a previous undo back rather than undoing work. */
+  redo: boolean;
 };
 
 /**
@@ -36,10 +70,22 @@ export async function revertChangeset(opts: {
   return prisma.$transaction(async (tx) => {
     const original = await tx.changeset.findUnique({
       where: { id: opts.changesetId },
-      select: { id: true, labId: true, summary: true, revertedAt: true },
+      select: {
+        id: true,
+        labId: true,
+        summary: true,
+        revertedAt: true,
+        restorePayload: true,
+      },
     });
     if (!original) throw new Error("That change no longer exists.");
     if (original.revertedAt) throw new Error("That change has already been undone.");
+
+    // Undoing a revert means putting back exactly what it took away, which is
+    // only possible because the revert wrote down what that was.
+    if (original.restorePayload) {
+      return replay(tx, original.restorePayload as unknown as RestorePayload, opts);
+    }
 
     const revert = await tx.changeset.create({
       data: {
@@ -51,6 +97,47 @@ export async function revertChangeset(opts: {
       },
       select: { id: true },
     });
+
+    // Capture before destroying. Rows the changeset created are read out whole
+    // so they can be re-inserted; intervals it closed keep only their closing
+    // half, since reverting a move reopens a row rather than removing it.
+    const deleted: Record<string, unknown[]> = {};
+    for (const table of RESTORE_ORDER) {
+      const rows = await (
+        tx as unknown as Record<string, { findMany: (a: object) => Promise<unknown[]> }>
+      )[table].findMany({ where: { changesetId: original.id } });
+      if (rows.length) deleted[table] = rows;
+    }
+
+    const [animalToReopen, cageToReopen] = await Promise.all([
+      tx.animalCagePlacement.findMany({
+        where: { endChangesetId: original.id },
+        select: { id: true, endedAt: true, endedById: true, endRecordedAt: true },
+      }),
+      tx.cagePlacement.findMany({
+        where: { endChangesetId: original.id },
+        select: { id: true, endedAt: true, endedById: true, endRecordedAt: true },
+      }),
+    ]);
+
+    const reopened: RestorePayload["reopened"] = [
+      ...animalToReopen.map((r) => ({
+        table: "animalCagePlacement" as const,
+        id: r.id,
+        endedAt: r.endedAt!.toISOString(),
+        endedById: r.endedById,
+        endRecordedAt: r.endRecordedAt?.toISOString() ?? null,
+        endChangesetId: original.id,
+      })),
+      ...cageToReopen.map((r) => ({
+        table: "cagePlacement" as const,
+        id: r.id,
+        endedAt: r.endedAt!.toISOString(),
+        endedById: r.endedById,
+        endRecordedAt: r.endRecordedAt?.toISOString() ?? null,
+        endChangesetId: original.id,
+      })),
+    ];
 
     // 1. Remove what the changeset created.
     const [animalPlacements, cagePlacements, events] = await Promise.all([
@@ -66,23 +153,24 @@ export async function revertChangeset(opts: {
     const [reopenedAnimals, reopenedCages] = await Promise.all([
       tx.animalCagePlacement.updateMany({
         where: { endChangesetId: original.id },
-        data: {
-          endedAt: null,
-          endedById: null,
-          endRecordedAt: null,
-          endChangesetId: null,
-        },
+        data: { endedAt: null, endedById: null, endRecordedAt: null, endChangesetId: null },
       }),
       tx.cagePlacement.updateMany({
         where: { endChangesetId: original.id },
-        data: {
-          endedAt: null,
-          endedById: null,
-          endRecordedAt: null,
-          endChangesetId: null,
-        },
+        data: { endedAt: null, endedById: null, endRecordedAt: null, endChangesetId: null },
       }),
     ]);
+
+    await tx.changeset.update({
+      where: { id: revert.id },
+      data: {
+        restorePayload: {
+          originalChangesetId: original.id,
+          deleted,
+          reopened,
+        } as object,
+      },
+    });
 
     await tx.changeset.update({
       where: { id: original.id },
@@ -95,8 +183,77 @@ export async function revertChangeset(opts: {
       placementsReopened: reopenedAnimals.count + reopenedCages.count,
       eventsRemoved: events.count,
       otherRowsRemoved: others,
+      redo: false,
     };
   });
+}
+
+/**
+ * Puts back what a revert removed.
+ *
+ * The reverse of the unwind, in reverse order: intervals are re-closed only
+ * after the rows that used to sit on top of them exist again, or the overlap
+ * constraint rejects the transaction.
+ */
+async function replay(
+  tx: Tx,
+  payload: RestorePayload,
+  opts: { changesetId: string; actorId: string; reason?: string | null },
+): Promise<UndoSummary> {
+  // Mirror of the unwind, and the order matters just as much. Intervals the
+  // revert reopened must be re-closed *before* the rows that used to sit on
+  // top of them are re-inserted, or the two overlap and the exclusion
+  // constraint rejects the whole transaction. Doing it the other way round is
+  // exactly what the constraint caught the first time this was written.
+  let reclosed = 0;
+  for (const row of payload.reopened) {
+    const data = {
+      endedAt: new Date(row.endedAt),
+      endedById: row.endedById,
+      endRecordedAt: row.endRecordedAt ? new Date(row.endRecordedAt) : null,
+      endChangesetId: row.endChangesetId,
+    };
+    // The two delegates have structurally identical but nominally distinct
+    // signatures, so a union of them is not callable.
+    if (row.table === "animalCagePlacement") {
+      await tx.animalCagePlacement.update({ where: { id: row.id }, data });
+    } else {
+      await tx.cagePlacement.update({ where: { id: row.id }, data });
+    }
+    reclosed++;
+  }
+
+  let restored = 0;
+  for (const table of RESTORE_ORDER) {
+    const rows = payload.deleted[table];
+    if (!rows?.length) continue;
+    await (
+      tx as unknown as Record<
+        string,
+        { createMany: (a: { data: unknown[] }) => Promise<{ count: number }> }
+      >
+    )[table].createMany({ data: rows });
+    restored += rows.length;
+  }
+
+  // The original stands again, and the revert is spent.
+  await tx.changeset.update({
+    where: { id: payload.originalChangesetId },
+    data: { revertedAt: null, revertedByChangesetId: null },
+  });
+  await tx.changeset.update({
+    where: { id: opts.changesetId },
+    data: { revertedAt: new Date(), restorePayload: undefined },
+  });
+
+  return {
+    revertChangesetId: opts.changesetId,
+    placementsRemoved: 0,
+    placementsReopened: reclosed,
+    eventsRemoved: 0,
+    otherRowsRemoved: restored,
+    redo: true,
+  };
 }
 
 /**
@@ -135,7 +292,22 @@ export async function recentChangesets(opts: { labId?: string; limit?: number } 
     include: {
       actor: { select: { id: true, name: true } },
       revertedBy: {
-        select: { createdAt: true, actor: { select: { name: true } } },
+        select: { id: true, createdAt: true, actor: { select: { name: true } } },
+      },
+      // Enough to point the row at whatever it changed. One row of each is
+      // plenty: a changeset that touched forty cages still only needs a
+      // sensible place to land.
+      events: {
+        select: { animalId: true, cage: { select: { code: true } } },
+        take: 1,
+      },
+      animalPlacementsStarted: {
+        select: { animalId: true, cage: { select: { code: true } } },
+        take: 1,
+      },
+      cagePlacementsStarted: {
+        select: { cage: { select: { code: true } } },
+        take: 1,
       },
       _count: {
         select: {
@@ -146,4 +318,20 @@ export async function recentChangesets(opts: { labId?: string; limit?: number } 
       },
     },
   });
+}
+
+/** Where a row in the activity log should take you when clicked. */
+export function changesetTarget(cs: {
+  events: Array<{ animalId: string | null; cage: { code: string } | null }>;
+  animalPlacementsStarted: Array<{ animalId: string; cage: { code: string } }>;
+  cagePlacementsStarted: Array<{ cage: { code: string } }>;
+}): string | null {
+  const cage =
+    cs.events[0]?.cage?.code ??
+    cs.animalPlacementsStarted[0]?.cage.code ??
+    cs.cagePlacementsStarted[0]?.cage.code;
+  if (cage) return `/cages/${encodeURIComponent(cage)}`;
+
+  const animal = cs.events[0]?.animalId ?? cs.animalPlacementsStarted[0]?.animalId;
+  return animal ? `/animals/${animal}` : null;
 }
