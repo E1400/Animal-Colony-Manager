@@ -23,7 +23,14 @@ export async function undoChangeset(changesetId: string): Promise<UndoResult> {
 
     const changeset = await prisma.changeset.findUnique({
       where: { id: changesetId },
-      select: { id: true, labId: true, actorId: true, revertedAt: true, summary: true },
+      select: {
+        id: true,
+        labId: true,
+        actorId: true,
+        revertedAt: true,
+        summary: true,
+        kind: true,
+      },
     });
     if (!changeset) return { ok: false, error: "That change no longer exists." };
     if (!changeset.labId) {
@@ -31,7 +38,13 @@ export async function undoChangeset(changesetId: string): Promise<UndoResult> {
     }
 
     const grant = await resolveGrant(actor.id, changeset.labId);
-    const verdict = canUndoChangeset(grant, changeset, actor.id);
+    // A redo targets the revert itself. Judging it by revertedAt would refuse
+    // any revert an older build had already marked spent.
+    const verdict = canUndoChangeset(
+      grant,
+      { ...changeset, revertedAt: changeset.kind === "REVERT" ? null : changeset.revertedAt },
+      actor.id,
+    );
     if (!verdict.allowed) {
       return { ok: false, error: verdict.reason ?? "You cannot undo that change." };
     }

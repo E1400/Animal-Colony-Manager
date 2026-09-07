@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import type { Tx } from "@/lib/changeset";
 
 /**
@@ -79,13 +80,16 @@ export async function revertChangeset(opts: {
       },
     });
     if (!original) throw new Error("That change no longer exists.");
-    if (original.revertedAt) throw new Error("That change has already been undone.");
 
     // Undoing a revert means putting back exactly what it took away, which is
-    // only possible because the revert wrote down what that was.
+    // only possible because the revert wrote down what that was. Checked before
+    // the reverted-at guard: an earlier build marked reverts spent instead of
+    // deleting them, and those are still perfectly replayable.
     if (original.restorePayload) {
       return replay(tx, original.restorePayload as unknown as RestorePayload, opts);
     }
+
+    if (original.revertedAt) throw new Error("That change has already been undone.");
 
     const revert = await tx.changeset.create({
       data: {
@@ -365,6 +369,23 @@ type WithSubjects = {
  * to the cage and the animal it was about. Cages are labelled by code and
  * animals by their primary ear tag, since that is what is written on them.
  */
+/**
+ * Which of these reverts can be undone in turn.
+ *
+ * Reverts recorded before undo became reversible carry no payload, so there is
+ * nothing to put back and offering the button would be a lie. Asked as a
+ * separate id-only query because the payloads themselves can be large.
+ */
+export async function replayableRevertIds(ids: string[]): Promise<Set<string>> {
+  const wanted = ids.filter(Boolean);
+  if (wanted.length === 0) return new Set();
+  const rows = await prisma.changeset.findMany({
+    where: { id: { in: wanted }, NOT: { restorePayload: { equals: Prisma.DbNull } } },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
 export type ChangesetLink = {
   kind: "cage" | "animal";
   label: string;

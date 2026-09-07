@@ -32,7 +32,12 @@ export function TopNav({ account }: { account?: ReactNode }) {
     >
       {/* Keeps the bar clear of the notch on iOS. */}
       <div className="h-[env(safe-area-inset-top)]" />
-      <div className="mx-auto flex w-full max-w-3xl items-center gap-2 pr-2">
+      {/*
+        Wider than the reading column on purpose. Six links plus the theme
+        control and an account do not fit 768px, which clipped "Activity" and
+        truncated the name; the bar is chrome and can use the room.
+      */}
+      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-2">
         {/*
           Six labels do not fit across a phone. Rather than drop to icons —
           which fail the same 11pm test — the links scroll horizontally while
@@ -57,7 +62,9 @@ export function TopNav({ account }: { account?: ReactNode }) {
             );
           })}
         </ul>
-        {account ? <div className="flex shrink-0 items-center">{account}</div> : null}
+        {account ? (
+          <div className="flex shrink-0 items-center gap-5 pl-3">{account}</div>
+        ) : null}
       </div>
     </nav>
   );
