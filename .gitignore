@@ -41,6 +41,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# database snapshots from `npm run db:export`
+/backups/
+
 # prisma / db
 /prisma/dev.db
 /prisma/dev.db-journal

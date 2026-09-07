@@ -150,7 +150,7 @@ export function QrScanner() {
             onChange={(e) => setManual(e.target.value)}
             placeholder="CG-1000"
             autoComplete="off"
-            className="min-h-14 flex-1 rounded-xl border border-border bg-surface px-4 font-mono text-lg placeholder:font-sans placeholder:text-muted"
+            className="min-h-14 min-w-0 flex-1 rounded-xl border border-border bg-surface px-4 font-mono text-lg placeholder:font-sans placeholder:text-muted"
           />
           <button
             type="submit"

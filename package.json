@@ -20,7 +20,9 @@
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:export": "tsx scripts/backup.ts export",
+    "db:restore": "tsx scripts/backup.ts restore"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -46,6 +48,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "axe-core": "^4.13.0",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",

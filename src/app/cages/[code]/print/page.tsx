@@ -61,6 +61,7 @@ export default async function CageCardPage({ params }: PageProps<"/cages/[code]/
           </div>
           <div
             className="shrink-0 [&>svg]:h-[110px] [&>svg]:w-[110px]"
+            role="img"
             aria-label={`QR code linking to ${url}`}
             dangerouslySetInnerHTML={{ __html: svg }}
           />

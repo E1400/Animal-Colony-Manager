@@ -111,7 +111,7 @@ export function CageActions({ code }: { code: string }) {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Health check note"
-          className="min-h-14 flex-1 rounded-xl border border-border bg-surface px-4 text-base placeholder:text-muted"
+          className="min-h-14 min-w-0 flex-1 rounded-xl border border-border bg-surface px-4 text-base placeholder:text-muted"
         />
         <button
           type="button"
