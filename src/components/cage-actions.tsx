@@ -78,7 +78,7 @@ export function CageActions({ code }: { code: string }) {
       }
     } catch {
       // Network failure: leave it queued and say so plainly.
-      setError("Saved on this phone — will sync when you have signal.");
+      setError("Saved on this phone. Waiting to sync.");
     }
   }
 
@@ -99,7 +99,7 @@ export function CageActions({ code }: { code: string }) {
         }
         className="flex min-h-14 w-full items-center justify-center rounded-xl bg-accent px-4 text-lg font-semibold text-accent-contrast disabled:opacity-60"
       >
-        Cage changed
+        Log a cage change
       </button>
 
       <div className="mt-3 flex gap-2">
@@ -139,8 +139,7 @@ export function CageActions({ code }: { code: string }) {
         {error ? <p className="text-warn">{error}</p> : null}
         {pending.length > 0 ? (
           <p className="rounded-xl bg-warn/15 px-4 py-3 text-warn">
-            {pending.length} {pending.length === 1 ? "entry" : "entries"} waiting to
-            sync. They keep the time you tapped, not the time they upload.
+            {pending.length} waiting to sync
           </p>
         ) : null}
       </div>

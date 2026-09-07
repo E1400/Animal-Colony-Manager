@@ -1,7 +1,11 @@
 import { getCurrentActor } from "@/lib/actor";
 import { resolveGrant } from "@/lib/auth/grants";
 import { can, canUndoChangeset } from "@/lib/auth/permissions";
-import { changesetLinks, recentChangesets } from "@/lib/operations/undo";
+import {
+  changesetLinks,
+  recentChangesets,
+  replayableRevertIds,
+} from "@/lib/operations/undo";
 import Link from "next/link";
 
 import { Badge, EmptyState, PageHeader, humanize } from "@/components/ui";
@@ -32,6 +36,10 @@ export default async function ActivityPage() {
   // there is simply nobody to attribute an undo to.
   const grant =
     actor?.labId != null ? await resolveGrant(actor.id, actor.labId) : null;
+
+  const replayable = await replayableRevertIds(
+    changesets.map((c) => c.revertedByChangesetId).filter((id): id is string => !!id),
+  );
 
   return (
     <>
@@ -141,8 +149,12 @@ export default async function ActivityPage() {
                         ? ` · ${when(cs.revertedBy.createdAt)}`
                         : ""}
                     </p>
-                    {cs.revertedBy?.id && grant && actor ? (
+                    {cs.revertedBy?.id && grant && actor && replayable.has(cs.revertedBy.id) ? (
                       <UndoButton
+                        // Keyed so switching between undo and redo mounts a
+                        // fresh button; without it React kept the previous
+                        // result message on the reset card.
+                        key={`redo-${cs.revertedBy.id}`}
                         mode="redo"
                         changesetId={cs.revertedBy.id}
                         summary={cs.summary}
@@ -154,6 +166,7 @@ export default async function ActivityPage() {
                   </>
                 ) : (
                   <UndoButton
+                    key={`undo-${cs.id}`}
                     changesetId={cs.id}
                     summary={cs.summary}
                     disabledReason={verdict.allowed ? undefined : verdict.reason}
