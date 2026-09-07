@@ -1,7 +1,7 @@
 import { getCurrentActor } from "@/lib/actor";
 import { resolveGrant } from "@/lib/auth/grants";
 import { can, canUndoChangeset } from "@/lib/auth/permissions";
-import { changesetTarget, recentChangesets } from "@/lib/operations/undo";
+import { changesetLinks, recentChangesets } from "@/lib/operations/undo";
 import Link from "next/link";
 
 import { Badge, EmptyState, PageHeader, humanize } from "@/components/ui";
@@ -65,7 +65,7 @@ export default async function ActivityPage() {
                 ? canUndoChangeset(grant, cs, actor.id)
                 : { allowed: false, reason: "Sign in to undo." };
 
-            const href = changesetTarget(cs);
+            const links = changesetLinks(cs);
 
             const touched =
               cs._count.animalPlacementsStarted +
@@ -79,25 +79,32 @@ export default async function ActivityPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    {href ? (
-                      // The title is the link rather than the whole card: the
-                      // card also holds a button, and nesting one interactive
-                      // element inside another breaks keyboard navigation.
-                      <Link
-                        href={href}
-                        className="font-medium underline-offset-4 hover:underline"
-                      >
-                        {cs.summary}
-                      </Link>
-                    ) : (
-                      <p className="font-medium">{cs.summary}</p>
-                    )}
+                    <p className="font-medium">{cs.summary}</p>
                     <p className="mt-1 text-sm text-muted">
                       {cs.actor?.name ?? "system"} · {when(cs.createdAt)}
                       {touched > 0 ? ` · ${touched} record${touched === 1 ? "" : "s"}` : ""}
                     </p>
                     {cs.reason ? (
                       <p className="mt-1 text-sm text-muted">“{cs.reason}”</p>
+                    ) : null}
+
+                    {links.length > 0 ? (
+                      // Individual subjects rather than one link on the title:
+                      // a health check on an animal in a cage should get you to
+                      // either, and "which one did this touch" is the question
+                      // the log is usually asked.
+                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                        {links.map((link) => (
+                          <li key={link.href}>
+                            <Link
+                              href={link.href}
+                              className="inline-flex min-h-8 items-center rounded-md border border-border px-2 font-mono text-xs hover:border-accent"
+                            >
+                              {link.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                   </div>
                   {cs.kind !== "MANUAL" ? <Badge>{humanize(cs.kind)}</Badge> : null}

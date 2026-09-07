@@ -34,7 +34,9 @@ export async function SessionBar() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden max-w-56 truncate text-sm text-muted sm:block">
+      {/* The links, the theme control and Sign out all have to fit the same
+          768px bar. Identity is the part that can wait for a wider screen. */}
+      <span className="hidden max-w-48 truncate text-sm text-muted lg:block">
         {actor.name}
         {roles ? <> · {roles}</> : <> · no role</>}
         {covering.length > 0 ? (
