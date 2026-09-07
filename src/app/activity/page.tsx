@@ -88,24 +88,44 @@ export default async function ActivityPage() {
                       <p className="mt-1 text-sm text-muted">“{cs.reason}”</p>
                     ) : null}
 
-                    {links.length > 0 ? (
-                      // Individual subjects rather than one link on the title:
-                      // a health check on an animal in a cage should get you to
-                      // either, and "which one did this touch" is the question
-                      // the log is usually asked.
-                      <ul className="mt-2 flex flex-wrap gap-1.5">
-                        {links.map((link) => (
-                          <li key={link.href}>
+                    {/*
+                      Individual subjects rather than one link on the title: a
+                      health check on an animal in a cage should get you to
+                      either, and "which one did this touch" is what the log is
+                      usually asked.
+
+                      Grouped under their own word because "CG-1000" and "2101"
+                      are both just tokens on a chip — without the labels there
+                      is nothing telling you which is a cage and which a mouse.
+                    */}
+                    {(["cage", "animal"] as const).map((kind) => {
+                      const of = links.filter((l) => l.kind === kind);
+                      if (of.length === 0) return null;
+                      const word =
+                        kind === "cage"
+                          ? of.length === 1 ? "Cage" : "Cages"
+                          : of.length === 1 ? "Mouse" : "Mice";
+                      return (
+                        <div key={kind} className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs uppercase tracking-wide text-muted">
+                            {word}
+                          </span>
+                          {of.map((link) => (
                             <Link
+                              key={link.href}
                               href={link.href}
-                              className="inline-flex min-h-8 items-center rounded-md border border-border px-2 font-mono text-xs hover:border-accent"
+                              className={`inline-flex min-h-8 items-center rounded-md border px-2 font-mono text-xs hover:border-accent ${
+                                kind === "cage"
+                                  ? "border-border bg-surface-muted"
+                                  : "border-accent/40 bg-accent/10"
+                              }`}
                             >
                               {link.label}
                             </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                   {cs.kind !== "MANUAL" ? <Badge>{humanize(cs.kind)}</Badge> : null}
                 </div>

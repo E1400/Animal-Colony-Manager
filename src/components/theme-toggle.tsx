@@ -87,10 +87,12 @@ export function ThemeToggle() {
       onClick={() => choose(next)}
       aria-label={`Switch to ${next} mode`}
       title={`Switch to ${next} mode`}
-      className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
+      // Square and icon-only: the written label was as wide as the control
+      // itself and crowded the account name beside it. Still 44px, so it stays
+      // a real tap target.
+      className="flex size-11 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:border-accent hover:text-foreground"
     >
       {theme === "dark" ? <MoonIcon /> : <SunIcon />}
-      <span className="hidden sm:inline">{theme === "dark" ? "Dark" : "Light"}</span>
     </button>
   );
 }
