@@ -3,321 +3,211 @@
 **Live demo:** https://animal-colony-manager.vercel.app
 **Demo video:** _TODO — 2-3 min walkthrough_
 
-A phone-friendly system for tracking mice, cages, husbandry, and staff coverage
-in a vivarium — built for [Task 2](https://github.com/salk-airc/rse-takehome-2026/blob/main/tasks/02-colony-manager.md)
-of the Salk AIRC Research Software Engineer take-home.
+Phone-first colony management for a research vivarium — mice, cages, husbandry
+and staff coverage. Built for [Task 2](https://github.com/salk-airc/rse-takehome-2026/blob/main/tasks/02-colony-manager.md)
+of the Salk AIRC RSE take-home.
 
-## Who this is for
-
-A lab manager or grad student standing in the vivarium in gloves, one hand
-free, who currently tracks ~400 mice across six racks in a shared Google
-Sheet. This replaces that sheet with something that works one-handed on a
-phone, remembers who changed what, and can be handed off when someone goes on
-vacation.
+It replaces the shared Google Sheet a lab manager currently keeps for ~400 mice
+across six racks, with something usable one-handed in gloves, that remembers who
+changed what, and can be handed over when someone goes on holiday.
 
 ## What it does
 
-- Tracks where every animal is (cage) and where every cage is (rack position),
-  as a time-stamped history, not a snapshot — "which mice were in B-04-12 on
-  June 3rd" is an ordinary query.
-- Digital, printable, QR-linked cage cards.
-- Husbandry event logging (cage changes, health checks, weaning, tail snips,
-  weights, treatments, deaths, transfers) with who/when and easy correction.
-- Coverage/on-call assignment for handoffs.
-- Sign-in via GitHub (OIDC), with role-scoped permissions (PI / lab manager /
-  undergrad / vet) — not just a login screen.
-- Spreadsheet ingestion with column mapping, dry-run preview, partial success,
-  and idempotent re-upload — built and tested against deliberately messy
-  fixture sheets in `fixtures/`.
-- Soft deletes, an audit trail, and changeset-based undo for bulk mistakes.
+- **Location as history, not a snapshot.** "Who was in B-04-12 on June 3rd" is
+  an ordinary query, not an archaeology project.
+- **Printable, QR-linked cage cards** — scan one with a phone camera and the
+  cage record opens. No app to install.
+- **One-tap husbandry logging**, with an offline queue for dead spots behind a
+  rack.
+- **Spreadsheet import** with column mapping, a dry run, per-row errors,
+  in-browser cell editing and idempotent re-upload. Sample sheets to try it on
+  are in [`examples/`](examples/).
+- **GitHub sign-in with role-scoped permissions** (PI, lab manager,
+  technician, undergrad, vet, auditor) plus time-bounded coverage handoff.
+- **Undo — and redo — of any change**, as one action, from an activity log.
+- Soft deletes, full audit trail, and a verified backup/restore path.
 
-## Setup (cold clone)
+## Quick start
 
-No Docker, no Python, no locally-installed Postgres. Node 22+ is the only
-prerequisite.
+Node 22+ is the only prerequisite. No Docker, no Python, no local Postgres
+install.
 
 ```bash
 git clone https://github.com/E1400/Animal-Colony-Manager.git
 cd Animal-Colony-Manager
 cp .env.example .env
-npm install            # postinstall runs `prisma generate`
+npm install          # postinstall runs `prisma generate`
 
-npm run db:up          # starts a local Postgres, prints a URL
-                       # paste it into .env as DATABASE_URL
-npm run db:deploy      # apply migrations
-npm run db:seed        # ~415 animals, 128 cages, breeding pairs, litters
-
-npm run dev            # http://localhost:3000
+npm run db:up        # local Postgres — paste the URL it prints into .env
+npm run db:deploy    # migrations
+npm run db:seed      # 415 animals, 128 cages, breeding pairs, litters
+npm run dev          # http://localhost:3000
 ```
 
-`npm run db:down` stops the database; `npm run db:reset` drops, re-migrates and
-re-seeds it.
+`npm run db:down` stops it; `npm run db:reset` drops, re-migrates and re-seeds.
+The seed is deterministic, so the demo, screenshots and tests all describe the
+same colony.
 
-The seed is deterministic — a fixed PRNG seed — so the demo, the screenshots
-and the tests all describe the same colony.
-
-### Running the tests
-
-The suite truncates every table between tests, so it needs its own database
-**server** — a different database name or `?schema=` on the dev server is not
-isolation, because that server routes every name to the same store.
+## Tests
 
 ```bash
-npm run db:up:test     # second server; put its URL in .env as TEST_DATABASE_URL
-npm test
+npm run db:up:test   # second server — put its URL in .env as TEST_DATABASE_URL
+npm test             # 74 tests
 ```
 
-Global setup refuses to run if it finds the seeded colony in the target, so a
-misconfiguration fails loudly instead of destroying data.
+The suite truncates every table, so it needs its own database **server**. A
+different database name or `?schema=` on the dev server is not isolation — that
+server routes every name to the same store. Global setup refuses to run if it
+finds the seeded colony in the target.
 
 ## Deployment
 
-Deployed on Vercel against managed Postgres. Two things are non-obvious:
+Vercel + Neon. `vercel-build` runs `prisma migrate deploy && next build`, so a
+deploy carrying schema changes applies them first and fails the build rather
+than serving new code against an old schema.
 
-**The database must support `btree_gist`.** The placement tables enforce
-non-overlapping intervals with Postgres exclusion constraints, which need that
-extension. Neon and Prisma Postgres both provide it; a provider that does not
-will fail on the second migration. This has been verified end to end — the full
-test suite, including the four tests that assert the *database* rejects
-overlapping placements, passes against managed Postgres, not just locally.
-
-**Migrations run at deploy, not by hand.** `vercel-build` runs
-`prisma migrate deploy && next build`, so a deploy that ships schema changes
-applies them first and fails the build rather than serving code against an
-older schema.
-
-**Seeding a hosted database.** The seed refuses to touch a database that
-already contains a lab, and refuses a hosted `DATABASE_URL` outright unless
-`SEED_ALLOW_REMOTE=1` is set — it truncates every table, which is right for an
-empty database and catastrophic for one in use. To bootstrap a fresh
-deployment without copying credentials onto a laptop, temporarily insert the
-seed into the build:
-
-```
-"vercel-build": "prisma migrate deploy && SEED_ALLOW_REMOTE=1 prisma db seed && next build"
-```
-
-deploy once, then take it back out. The build environment already holds
-`DATABASE_URL`, so nothing sensitive has to move. `SEED_FORCE=1` overrides the
-already-populated check, and is the only way to wipe a live colony.
-
-Environment variables to set in the Vercel project:
-
-| Variable | Needed for | Notes |
+| Variable | For | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | everything | Pooled connection string; used by the app at runtime |
-| `DIRECT_DATABASE_URL` | migrations | Unpooled connection. Optional but strongly recommended — see below |
-| `AUTH_SECRET` | sign-in | `npx auth secret` or `openssl rand -base64 32` |
-| `AUTH_GITHUB_ID` | sign-in | GitHub OAuth App client ID |
-| `AUTH_GITHUB_SECRET` | sign-in | GitHub OAuth App client secret |
+| `DATABASE_URL` | everything | Pooled connection string |
+| `DIRECT_DATABASE_URL` | migrations | Unpooled. Strongly recommended — see below |
+| `AUTH_SECRET` | sign-in | `npx auth secret` |
+| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | sign-in | GitHub OAuth App |
 
-**Migrations must not run through a connection pooler.** `prisma migrate deploy`
-takes a Postgres advisory lock, which pgbouncer in transaction-pooling mode does
-not support, so the migration hangs or fails confusingly. `prisma7.config.ts`
-therefore prefers `DIRECT_DATABASE_URL`, then `DATABASE_URL_UNPOOLED`, then
-`POSTGRES_URL_NON_POOLING`, falling back to `DATABASE_URL` for local development
-where no pooler is involved. Vercel's Neon integration sets the unpooled
-variable automatically, so this usually needs no action — but if you paste a
-connection string in by hand, paste the unpooled one too.
+Three things that will bite otherwise:
 
-GitHub allows one callback URL per OAuth App, so register two apps — one for
-`http://localhost:3000/api/auth/callback/github` and one for
-`https://<your-domain>/api/auth/callback/github`.
-
-Note that `node-postgres` now warns that `sslmode=require` will stop implying
-certificate verification. Prefer `sslmode=verify-full` on the production
-connection string.
+- **The database must support `btree_gist`.** The placement constraints need
+  it. Neon and Prisma Postgres provide it; a provider that doesn't fails on the
+  second migration.
+- **Migrations must not run through a pooler.** `prisma migrate deploy` takes
+  an advisory lock that pgbouncer doesn't support in transaction mode.
+  `prisma7.config.ts` prefers `DIRECT_DATABASE_URL`, then
+  `DATABASE_URL_UNPOOLED`, then `POSTGRES_URL_NON_POOLING`, falling back to
+  `DATABASE_URL` locally.
+- **Seeding a hosted database** requires `SEED_ALLOW_REMOTE=1`, and the seed
+  refuses a database that already holds a lab. To bootstrap a fresh deployment
+  without copying credentials around, add `SEED_ALLOW_REMOTE=1 prisma db seed`
+  to `vercel-build`, deploy once, then remove it.
 
 ## Backup and restore
 
-A backup nobody has restored is a rumour, so this one is demonstrable in two
-commands and covered by tests.
-
 ```bash
-npm run db:export -- backups/colony.json     # full logical snapshot
-npm run db:restore -- backups/colony.json    # refuses a non-empty database
+npm run db:export -- backups/colony.json    # full JSON snapshot
+npm run db:restore -- backups/colony.json   # refuses a non-empty database
 ```
 
-The snapshot is JSON, exported table by table in dependency order and restored
-in the same order inside a single transaction, so foreign keys hold at every
-step without disabling constraints and a half-restored colony is impossible.
-After restoring, every table's row count is compared against the snapshot and
-the command fails loudly if any differ.
+Exported and restored table-by-table in dependency order inside one
+transaction, so foreign keys hold throughout and a half-restore is impossible.
+Restore compares every table's row count against the snapshot and fails loudly
+on a mismatch.
 
-This was run for real between two separate Postgres instances: 4,238 rows out
-of the development colony and back in, every table matching. **The verification
-caught a bug in the restore itself** — emptiness was being decided from the
-`labs` table alone, so leftover rows elsewhere survived the wipe and inflated
-the counts. That is the entire argument for verifying rather than asserting.
+Run for real between two Postgres instances — 4,238 rows out and back, every
+table matching. Neon's point-in-time restore covers actual disaster recovery;
+this covers moving providers, handing a lab its own data, and being something
+anyone can verify.
 
-Neon also provides point-in-time restore, which is the right tool for actual
-disaster recovery. This export exists for what PITR does not cover: moving a
-colony to another provider, handing a lab its own data, and being something
-anyone can run and check.
+## Data model
 
-## Data model — what I chose and why
+The brief calls the data model the assignment, so here is the reasoning.
 
-The brief says the data model is the assignment, so this is the long section.
+**Location is a timestamped fact, not a column.** No `currentCageId` on
+`Animal`, no `rackPositionId` on `Cage`. Both are half-open intervals —
+`[startedAt, endedAt)`, null end meaning "still there" — in `CagePlacement` and
+`AnimalCagePlacement`. "Now" and "as of June 3rd" are then the same query with a
+different timestamp. The query layer has exactly one time predicate (`activeAt`);
+a separate `endedAt IS NULL` fast path would be a second definition of current
+state, free to drift. Two placement tables rather than one address means moving
+a cage between racks changes every occupant's location without touching an
+animal row.
 
-### Location is a fact with a timestamp, not a column
-
-There is no `currentCageId` on `Animal` and no `rackPositionId` on `Cage`.
-Where a cage sits and which cage an animal lives in are stored as half-open
-intervals in `CagePlacement` and `AnimalCagePlacement`:
-
-```
-[startedAt, endedAt)   endedAt IS NULL means "still there"
-```
-
-"Who is in B-04-12 now" and "who was in it on June 3rd" are then the same
-query with a different timestamp, and there is only one definition of current
-state to get wrong. The query layer has exactly one time predicate (`activeAt`
-in `src/lib/queries/placement.ts`) and "now" is `activeAt(new Date())` — a
-separate `endedAt IS NULL` fast path would be a second definition that could
-drift, which is the failure this shape exists to prevent.
-
-Two placement tables rather than one denormalised address means moving a cage
-between racks changes every occupant's address without touching a single
-animal row. There is a test asserting exactly that.
-
-### Overlap is enforced by Postgres, not by application code
-
-An animal cannot be in two cages at once, and a rack slot cannot hold two
-cages at once. Those are exclusion constraints over `tstzrange(started_at,
-ended_at)` using `btree_gist`, not `if` statements:
+**Overlap is enforced by Postgres.** An animal can't be in two cages at once,
+and a rack slot can't hold two cages:
 
 ```sql
-ALTER TABLE animal_cage_placements
-  ADD CONSTRAINT animal_cage_placements_no_overlap
-  EXCLUDE USING gist (animal_id WITH =, tstzrange(started_at, ended_at) WITH &&);
+EXCLUDE USING gist (animal_id WITH =, tstzrange(started_at, ended_at) WITH &&)
 ```
 
 Four people editing at once is the actual problem statement, and application
-checks lose that race. Four tests deliberately bypass the app layer and assert
-the *database* refuses the write.
+checks lose that race. Four tests bypass the app layer to assert the *database*
+refuses the write.
 
-### Event time and record time are different columns, everywhere
+**`occurredAt` and `recordedAt` are separate everywhere.** When it happened
+versus when someone typed it in. A death noticed Tuesday that happened Thursday
+lands in history on Thursday, and the UI shows the gap ("logged 22d later")
+rather than hiding it. The offline queue depends on this. There is deliberately
+no CHECK relating the two: late entry is normal, and a `now()`-based check is
+non-immutable, so rows valid at insert would fail on restore.
 
-`occurredAt` is when something happened in the vivarium; `recordedAt` is when
-a human typed it in. Facts arrive late and out of order — a death noticed on
-Tuesday that happened last Thursday has to land in history at Thursday. The UI
-shows the gap ("logged 22d later") rather than hiding it, and the offline
-write queue depends on this being expressible: an entry tapped behind a rack
-with no signal syncs later and still records the time of the tap.
+**Ear tags are never primary keys.** They get reused, collide across labs and
+are often mistyped. `Animal.id` is a UUID; tags live in `AnimalIdentifier`
+scoped by namespace, unique only over *active* rows — so a retired tag can be
+reissued and search finds its current holder, not the dead animal.
 
-There is deliberately **no** CHECK constraint relating the two. Late entry is
-normal, and a `now()`-based check is non-immutable — rows valid at insert time
-would fail revalidation on restore, breaking the backup path.
+**Every write belongs to a changeset.** `withChangeset()` opens a transaction
+and tags each row with one id, so a weaning that splits a cage into four is one
+thing to undo. The audit trail *is* the changeset table, not a parallel log that
+could drift. Undo unwinds in reverse order — created rows deleted before closed
+intervals reopen — or the exclusion constraint rejects it; there's a test for
+the ordering, not just the result.
 
-### Lab-local identifiers are never primary keys
+**All 53 temporal columns are `timestamptz`.** Prisma defaults to `timestamp`
+*without* zone, which would shift "as of June 3rd" under DST.
 
-Ear tags get reused after an animal dies, two labs use the same numbering, and
-transcription errors are routine. `Animal.id` is an opaque UUID; ear tags live
-in `AnimalIdentifier`, scoped by namespace, with uniqueness enforced only over
-*active* rows:
+### Deliberately not normalised
 
-```sql
-CREATE UNIQUE INDEX animal_identifiers_active_unique
-  ON animal_identifiers (namespace, scheme, value) WHERE retired_at IS NULL;
-```
-
-So a retired tag can legitimately be reissued, and search finds its current
-holder rather than the dead animal that used to wear it.
-
-### Every write belongs to a changeset
-
-`withChangeset()` opens a transaction and tags every row it writes with one
-changeset id. A weaning that splits one cage into four is a single action to
-the person who did it, so it has to be a single thing to undo. That also means
-the audit trail *is* the changeset table rather than a parallel log that could
-drift from the writes it describes.
-
-Undo unwinds in reverse order — rows the changeset created are deleted before
-rows it closed are reopened — or the reopened interval overlaps the one still
-stacked on top and the exclusion constraint rejects the transaction. There is a
-test for the ordering, not just the end state.
-
-### What is deliberately not normalised
-
-- **`RackPosition.label`** duplicates its own side/row/column. It is derived
-  from immutable slot geometry, not from occupancy, and it is what people read
-  off a rack and type into search. Recomputing a display string on every query
-  to avoid storing eight characters is a bad trade.
-- **`HusbandryEvent.payload` is JSON**, not a column per event type. A weight
-  has grams, a treatment has a drug and a dose, a plug check has neither. A
-  column per type means a migration every time the vet invents a new form;
-  the payload is validated per type in the app layer instead.
-- **Genotype is a row per assay, not a field on the animal.** Results arrive
-  weeks late, get re-run, and disagree between runs. `supersededAt` retires a
-  superseded result rather than overwriting it.
-- **`Litter.pupCountAtBirth` and `pupCountAtWean` are separate columns.** The
-  difference is real information — culling, loss — and the later number must
-  not overwrite the earlier one.
-- **`BreedingPair` has members rather than sire/dam columns.** Trios and
-  harems are normal; two FK columns would need a second table within a month.
-- **Soft delete on `Animal` and `Cage` only.** A dead animal and a
-  mis-entered animal are different things and neither may vanish from history.
-  Events and placements are not soft-deleted because undoing a changeset
-  removes them wholesale and the changeset itself records that it happened.
-
-### Timestamps are `timestamptz`
-
-Prisma's default is `timestamp(3)` — *without* time zone. For an app whose
-headline query is "as of June 3rd", that answer shifts under DST and across
-anyone entering data from a different zone. All 53 temporal columns are
-`@db.Timestamptz(3)`.
+- **`RackPosition.label`** duplicates its side/row/column. Derived from fixed
+  geometry, not occupancy, and it's what people read off a rack and type into
+  search.
+- **`HusbandryEvent.payload` is JSON.** A weight has grams, a treatment has a
+  drug and dose, a plug check has neither. A column per type means a migration
+  every time the vet invents a form; payloads are validated per type in the app.
+- **Genotype is a row per assay.** Results arrive late, get re-run, and
+  disagree. `supersededAt` retires a result rather than overwriting it.
+- **`pupCountAtBirth` and `pupCountAtWean` are separate.** The difference is
+  real information, and the later number must not erase the earlier one.
+- **`BreedingPair` has members, not sire/dam columns.** Trios and harems are
+  normal.
+- **Soft delete on `Animal` and `Cage` only.** Events and placements are
+  removed wholesale by undoing their changeset, which records that it happened.
 
 ## Known limitations
 
-Real gaps, separated from things left out on purpose.
+**Out of scope on purpose**
 
-**Deliberately out of scope**
+- The offline queue covers only flat, append-only actions. Structural changes
+  (moving animals, weaning) need a connection and say so — merging those
+  offline is a real distributed-systems problem, and getting it subtly wrong
+  corrupts history invisibly.
+- `DEMO_AUTO_MEMBERSHIP` grants a role to first-time visitors so evaluators can
+  exercise permissions. Off unless set, never applied to existing members, not
+  for a real lab.
+- Import recognises dam/sire columns but doesn't yet build pedigree links.
+- Authorization is lab-scoped plus coverage delegation; no per-cage ACLs.
 
-- **The offline queue covers only flat, append-only actions** — cage changes
-  and health notes. Structural changes (moving animals, weaning a litter)
-  require a connection and say so. Merging those offline is a genuine
-  distributed-systems problem, and getting it subtly wrong corrupts colony
-  history in a way nobody notices until it cannot be unpicked.
-- **`DEMO_AUTO_MEMBERSHIP` grants a role to any first-time visitor.** That is
-  a demo affordance so an evaluator can exercise the permission system. It is
-  off unless the variable is set, never applies to someone who already has a
-  membership, and should not be set for a real lab.
-- **Import maps a fixed set of fields.** Dam and sire columns are recognised
-  and mapped but not yet used to build pedigree links.
-- **No per-cage permission grants.** Authorization is scoped to a lab, plus
-  time-bounded coverage delegation. Cage-level ACLs were not needed to
-  demonstrate that roles differ meaningfully.
+**Rough edges**
 
-**Known rough edges**
-
-- The import wizard sends the parsed sheet back to the server on each
-  re-mapping. Fine for the few-hundred-row sheets a colony produces; a
-  ten-thousand-row file would want the parse cached server-side.
-- Genotype imported from a spreadsheet is stored against `locus` taken from
-  the strain column, which is a reasonable guess rather than a real locus name.
+- The import wizard round-trips the parsed sheet to the server on each
+  re-mapping. Fine at colony scale; a ten-thousand-row file would want the
+  parse cached server-side.
+- Genotype imported from a sheet uses the strain column as `locus`, which is a
+  guess rather than a real locus name.
 
 ## Where the data goes, and what it costs
 
 **What leaves the machine.** Colony data goes to one place: a Neon Postgres
-database in `us-west-1`, reached only by this app's server. Sign-in sends an
-OAuth round trip to GitHub, which tells us a user id, name, email and avatar
-URL and nothing else — GitHub never sees colony data, and no role or
-permission is stored there. The app is served from Vercel, so their edge sees
-request metadata as any host would. There are no analytics, no third-party
-scripts, and no AI or external API calls at runtime: the fonts are the only
-other origin, and they are served by Next.js from the same domain. Animal
-records never leave the database except through the export you run yourself.
+database in `us-west-1`, reached only by this app's server. Sign-in is an OAuth
+round trip to GitHub, which returns a user id, name, email and avatar and
+nothing else — GitHub never sees colony data, and no role is stored there.
+Vercel's edge sees request metadata as any host would. No analytics, no
+third-party scripts, no AI or external API calls at runtime. Animal records
+leave only through the export you run yourself.
 
-**Keys and cost.** Running this needs a GitHub OAuth App (free), a Neon
-project (free tier: 0.5 GB storage, ample for a colony of a few hundred
-animals whose entire seeded history is 4,238 rows), and Vercel's hobby tier
-(free). No paid API is required for anything, and nothing degrades if you
-have no budget — there is no premium path being held back. The only secrets
-are `DATABASE_URL`, `AUTH_SECRET` and the GitHub client ID and secret; all
-four live in environment variables, none are committed, and `.env` is
-gitignored with only `.env.example` tracked. If Neon disappeared tomorrow,
-`npm run db:export` produces a complete JSON snapshot and `npm run db:restore`
-puts it into any other Postgres — that path is tested, not asserted.
+**Keys and cost.** A free GitHub OAuth App, Neon's free tier (0.5 GB; the
+entire seeded colony is 4,238 rows) and Vercel hobby. No paid API anywhere, and
+nothing is held back behind one. The only secrets are `DATABASE_URL`,
+`AUTH_SECRET` and the GitHub client id and secret — all in environment
+variables, none committed, `.env` gitignored with only `.env.example` tracked.
+If Neon vanished tomorrow, `npm run db:export` and `npm run db:restore` move the
+colony to any other Postgres, and that path is tested rather than asserted.
 
 ## License
 
