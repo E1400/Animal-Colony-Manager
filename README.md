@@ -1,7 +1,7 @@
 # Animal Colony Manager
 
 **Live demo:** https://animal-colony-manager.vercel.app
-**Demo video:** [`docs/demo.mov`](docs/demo.mov) — walkthrough, phone and desktop
+**Demo video:** [`docs/demo.mp4`](docs/demo.mp4) — walkthrough, phone and desktop
 
 Phone-first colony management for a research vivarium — mice, cages, husbandry
 and staff coverage. Built for [Task 2](https://github.com/salk-airc/rse-takehome-2026/blob/main/tasks/02-colony-manager.md)
