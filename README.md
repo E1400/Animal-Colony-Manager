@@ -1,7 +1,6 @@
 # Animal Colony Manager
 
 **Live demo:** https://animal-colony-manager.vercel.app
-**Demo video:** [`docs/demo.mp4`](docs/demo.mp4) — walkthrough, phone and desktop
 
 Phone-first colony management for a research vivarium — mice, cages, husbandry
 and staff coverage. Built for [Task 2](https://github.com/salk-airc/rse-takehome-2026/blob/main/tasks/02-colony-manager.md)
@@ -10,6 +9,13 @@ of the Salk AIRC RSE take-home.
 It replaces the shared Google Sheet a lab manager currently keeps for ~400 mice
 across six racks, with something usable one-handed in gloves, that remembers who
 changed what, and can be handed over when someone goes on holiday.
+
+## Demo
+
+https://github.com/user-attachments/assets/b4798338-2980-4a46-aa80-773a05981d78
+
+Same file as a download, if the player will not load:
+[`docs/demo.mp4`](docs/demo.mp4).
 
 ## What it does
 
