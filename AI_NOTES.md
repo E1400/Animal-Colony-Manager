@@ -5,10 +5,9 @@
 - Built with Claude (Cowork), working directly against files in this folder
   on my Mac via the desktop app's device bridge, with a `CLAUDE.md` in this
   repo giving it the schema conventions and stack decisions up front.
-- Planning happened in a separate claude.ai Project ("Salk Projects") before
-  any code was written — see `claude/task2-plan.md` there for the full
-  architecture reasoning; this file only covers moments during the build
-  itself.
+- Planning happened in a separate claude.ai Project before any code was
+  written. The architecture reasoning that came out of it lives in the data
+  model section of `README.md`; this file covers the build itself.
 - **No subagents and no MCP servers.** Several MCP connectors were available
   (Google Drive, Gmail, Calendar) and none were relevant; the work stayed in
   one session against this repo. Two Anthropic-authored skills were loaded:
