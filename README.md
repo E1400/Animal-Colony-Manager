@@ -3,8 +3,7 @@
 **Live demo:** https://animal-colony-manager.vercel.app
 
 Phone-first colony management for a research vivarium — mice, cages, husbandry
-and staff coverage. Built for [Task 2](https://github.com/salk-airc/rse-takehome-2026/blob/main/tasks/02-colony-manager.md)
-of the Salk AIRC RSE take-home.
+and staff coverage.
 
 It replaces the shared Google Sheet a lab manager currently keeps for ~400 mice
 across six racks, with something usable one-handed in gloves, that remembers who
@@ -113,8 +112,6 @@ anyone can verify.
 
 ## Data model
 
-The brief calls the data model the assignment, so here is the reasoning.
-
 **Location is a timestamped fact, not a column.** No `currentCageId` on
 `Animal`, no `rackPositionId` on `Cage`. Both are half-open intervals —
 `[startedAt, endedAt)`, null end meaning "still there" — in `CagePlacement` and
@@ -183,9 +180,9 @@ the ordering, not just the result.
   (moving animals, weaning) need a connection and say so — merging those
   offline is a real distributed-systems problem, and getting it subtly wrong
   corrupts history invisibly.
-- `DEMO_AUTO_MEMBERSHIP` grants a role to first-time visitors so evaluators can
-  exercise permissions. Off unless set, never applied to existing members, not
-  for a real lab.
+- `DEMO_AUTO_MEMBERSHIP` grants a role to first-time visitors so anyone trying
+  the live demo can exercise permissions. Off unless set, never applied to
+  existing members, not for a real lab.
 - Import recognises dam/sire columns but doesn't yet build pedigree links.
 - Authorization is lab-scoped plus coverage delegation; no per-cage ACLs.
 
